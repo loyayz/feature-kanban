@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light;
+  --surface: #f9f9f9;
+  --surface-raised: #fff;
+  --surface-sunken: #f3f3f3;
+  --nav: #f9f9f9;
+  --text: #0d0d0d;
+  --text-soft: #303030;
+  --text-muted: #5d5d5d;
+  --text-faint: #6f6f6f;
+  --line: rgb(13 13 13 / 8%);
+  --line-strong: rgb(13 13 13 / 14%);
+  --signal: #0169cc;
+  --signal-light: #339cff;
+  --signal-soft: #e5f3ff;
+  --claude: #b65d35;
+  --warning-soft: #fff2cc;
+  --warning-text: #7a4b00;
+  --danger: #ba2623;
+  --danger-soft: #ffe9e8;
+  --success: #00692a;
+  --success-soft: #d9f4e4;
+  --font-display: Bahnschrift, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --font-body: "Segoe UI Variable Text", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --font-utility: Bahnschrift, "Segoe UI Variable Text", sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+  font-family: var(--font-body);
+}
+:root[data-host-theme="dark"] {
+  color-scheme: dark;
+  --surface: #181818;
+  --surface-raised: #232323;
+  --surface-sunken: #141414;
+  --nav: #1f1f1f;
+  --text: #fff;
+  --text-soft: rgb(255 255 255 / 71%);
+  --text-muted: rgb(255 255 255 / 60%);
+  --text-faint: rgb(255 255 255 / 50%);
+  --line: rgb(255 255 255 / 8.4%);
+  --line-strong: rgb(255 255 255 / 15.6%);
+  --signal: #339cff;
+  --signal-light: #83c3ff;
+  --signal-soft: #0d273f;
+  --warning-soft: #3d2e0b;
+  --warning-text: #ffd240;
+  --danger: #ff6764;
+  --danger-soft: #4d100e;
+  --success: #40c977;
+  --success-soft: #0f321d;
+}
+* { box-sizing: border-box; }
+html, body { min-width: 0; min-height: 100%; margin: 0; background: var(--surface); color: var(--text); }
+button, select { font: inherit; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+::selection { background: var(--signal-soft); color: var(--text); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-host-theme="light"]) {
+    color-scheme: dark;
+    --surface: #181818; --surface-raised: #232323; --surface-sunken: #141414; --nav: #1f1f1f;
+    --text: #fff; --text-soft: rgb(255 255 255 / 71%); --text-muted: rgb(255 255 255 / 60%); --text-faint: rgb(255 255 255 / 50%);
+    --line: rgb(255 255 255 / 8.4%); --line-strong: rgb(255 255 255 / 15.6%); --signal: #339cff; --signal-light: #83c3ff;
+    --signal-soft: #0d273f; --warning-soft: #3d2e0b; --warning-text: #ffd240;
+    --danger: #ff6764; --danger-soft: #4d100e; --success: #40c977; --success-soft: #0f321d;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

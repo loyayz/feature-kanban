@@ -1,0 +1,106 @@
+<main class="app-shell">
+  <header class="topbar">
+    <div class="topbar__identity">
+      <div class="brand" aria-label="Feature Kanban">
+        <span class="brand__mark"><i></i><i></i><i></i></span>
+        <span><strong>Feature</strong><small>Kanban</small></span>
+      </div>
+      <div class="heading">
+        <span class="kicker">Lifecycle control room</span>
+        <h1>{{ store.selectedProject() === 'all' ? '全部项目' : store.selectedProject() }}</h1>
+      </div>
+    </div>
+
+    <nav class="project-nav" aria-label="项目筛选">
+      <span class="control-label">项目</span>
+      <button
+        class="project-visibility-master"
+        type="button"
+        [class.active]="store.showHiddenProjects()"
+        [attr.aria-pressed]="store.showHiddenProjects()"
+        [attr.aria-label]="store.showHiddenProjects() ? '隐藏已隐藏项目' : '显示已隐藏项目'"
+        (click)="store.toggleHiddenProjects()"
+      >
+        <svg viewBox="0 0 20 16" aria-hidden="true">
+          <path d="M1.5 8s3.2-5.2 8.5-5.2S18.5 8 18.5 8 15.3 13.2 10 13.2 1.5 8 1.5 8Z"></path>
+          <circle cx="10" cy="8" r="2.3"></circle>
+          @if (!store.showHiddenProjects()) { <path class="eye-slash" d="m3 1 14 14"></path> }
+        </svg>
+      </button>
+      <div class="project-nav__items">
+        <button class="project-select" type="button" [class.active]="store.selectedProject() === 'all'" [attr.aria-pressed]="store.selectedProject() === 'all'" (click)="store.selectProject('all')">
+          <span class="project-icon project-icon--all">A</span><strong>All</strong><em>{{ allCount() }}</em>
+        </button>
+        @for (project of visibleProjects(); track project.name) {
+          <span class="project-nav__item" [class.project-nav__item--hidden]="project.hidden">
+            <button class="project-select" type="button" [class.active]="store.selectedProject() === project.name" [attr.aria-pressed]="store.selectedProject() === project.name" (click)="store.selectProject(project.name)">
+              <span class="project-icon">{{ project.name.slice(0, 1).toUpperCase() }}</span>
+              <strong>{{ project.name }}</strong><em>{{ projectCount(project.name) }}</em>
+            </button>
+            <button
+              class="project-visibility-toggle"
+              type="button"
+              [attr.aria-label]="project.hidden ? '恢复项目 ' + project.name : '隐藏项目 ' + project.name"
+              (click)="store.setProjectHidden(project.name, !project.hidden)"
+            >{{ project.hidden ? '○' : '×' }}</button>
+          </span>
+        }
+      </div>
+    </nav>
+  </header>
+
+  <section class="workspace">
+    <header class="toolbar">
+      <div class="tool-filter" role="group" aria-label="AI 工具筛选">
+        <span class="control-label">AI 工具</span>
+        <div class="segmented">
+          <button type="button" [class.active]="store.selectedTool() === 'all'" [attr.aria-pressed]="store.selectedTool() === 'all'" (click)="store.selectTool('all')">全部</button>
+          <button type="button" [class.active]="store.selectedTool() === 'codex'" [attr.aria-pressed]="store.selectedTool() === 'codex'" (click)="store.selectTool('codex')">Codex</button>
+          <button type="button" [class.active]="store.selectedTool() === 'claude'" [attr.aria-pressed]="store.selectedTool() === 'claude'" (click)="store.selectTool('claude')">Claude</button>
+        </div>
+      </div>
+      <div class="toolbar__actions">
+        <div class="view-switch" aria-label="卡片视图">
+          <button type="button" [class.active]="!store.archived()" [attr.aria-pressed]="!store.archived()" (click)="store.setArchived(false)">进行中</button>
+          <button type="button" [class.active]="store.archived()" [attr.aria-pressed]="store.archived()" (click)="store.setArchived(true)">已归档</button>
+        </div>
+        <button class="refresh" type="button" [disabled]="store.loading()" [class.refresh--loading]="store.loading()" (click)="store.load()" [attr.aria-label]="store.loading() ? '正在刷新看板' : '刷新看板'">↻</button>
+      </div>
+    </header>
+
+    <div class="statusline">
+      <span><i></i>{{ visibleCount() }} 个可见流程</span>
+      <p>AI 上报当前快照 · 看板不修改阶段</p>
+    </div>
+
+    @if (store.error()) {
+      <div class="service-error"><p>{{ store.error() }}</p><button type="button" (click)="store.load()">重试</button></div>
+    }
+
+    <div class="board" [class.board--archive]="store.archived()" [class.board--loading]="store.loading()">
+      @if (store.archived()) {
+        @for (card of visibleCards(); track card.id) {
+          <div class="archive-card">
+            <fk-lifecycle-card [card]="card" (openCard)="store.openDetail($event)" />
+          </div>
+        } @empty {
+          <div class="archive-empty"><span></span><p>暂无归档流程</p></div>
+        }
+      } @else {
+        @for (stage of stages; track stage; let index = $index) {
+          <fk-lifecycle-column
+            [stage]="stage"
+            [label]="stageLabels[stage]"
+            [index]="index + 1"
+            [cards]="cardsFor(stage)"
+            (openCard)="store.openDetail($event)"
+          />
+        }
+      }
+    </div>
+  </section>
+
+  @if (store.detail(); as detail) {
+    <fk-card-detail [card]="detail" (closeDetail)="store.closeDetail()" (archive)="store.archiveDetail($event)" />
+  }
+</main>

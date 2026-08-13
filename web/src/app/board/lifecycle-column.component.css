@@ -1,0 +1,16 @@
+:host { display: block; min-width: 0; border-right: 1px solid var(--line); transition: background-color 220ms ease; }
+:host(:last-child) { border-right: 0; }
+:host([data-arrival="true"]) { animation: column-arrival 700ms ease-out; }
+.column { min-width: 0; min-height: 100%; padding: 0 9px 24px; }
+header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; min-width: 0; min-height: 56px; }
+.sequence { display: none; }
+h2 { overflow: hidden; margin: 0; color: var(--text-soft); font: 660 13px/1.2 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
+.count { display: grid; min-width: 24px; height: 24px; place-items: center; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text-muted); font: 680 12px/1 var(--font-utility); }
+.rail { position: relative; height: 12px; margin: 0 -9px 12px; border-top: 1px solid var(--line-strong); }
+.rail::before { position: absolute; top: -4px; left: 13px; width: 7px; height: 7px; border: 1px solid var(--signal); border-radius: 50%; background: var(--surface); content: ""; }
+.rail span { display: block; width: 32px; margin-top: -1px; border-top: 2px solid var(--signal); }
+.cards { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.empty { display: grid; min-height: 128px; place-items: center; align-content: center; border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--text-faint); }
+.empty span { width: 18px; border-top: 1px solid currentColor; }
+.empty p { margin: 9px 0 0; font: 540 12px/1 var(--font-body); }
+@keyframes column-arrival { 0%, 100% { background: transparent; } 32% { background: var(--signal-soft); } }

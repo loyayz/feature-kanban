@@ -1,0 +1,15 @@
+<section class="column" [attr.aria-labelledby]="'stage-' + stage">
+  <header>
+    <span class="sequence">{{ index.toString().padStart(2, '0') }}</span>
+    <h2 [id]="'stage-' + stage">{{ label }}</h2>
+    <span class="count">{{ cards.length }}</span>
+  </header>
+  <div class="rail" aria-hidden="true"><span></span></div>
+  <div class="cards">
+    @for (card of cards; track card.id) {
+      <fk-lifecycle-card [card]="card" (openCard)="openCard.emit($event)" />
+    } @empty {
+      <div class="empty"><span></span><p>暂无流程</p></div>
+    }
+  </div>
+</section>

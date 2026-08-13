@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/out-tsc/app",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "types": []
+  },
+  "angularCompilerOptions": {
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
+  "files": ["web/src/main.ts"],
+  "include": ["web/src/**/*.d.ts", "src/shared/**/*.ts"]
+}

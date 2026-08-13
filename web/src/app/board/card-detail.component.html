@@ -1,0 +1,88 @@
+<div class="backdrop" (click)="closeDetail.emit()" aria-hidden="true"></div>
+<aside class="drawer" aria-labelledby="detail-title">
+  <header>
+    <div>
+      <span class="eyebrow">{{ card.projectName }} / {{ card.aiTool }}</span>
+      <h2 id="detail-title">{{ card.title }}</h2>
+    </div>
+    <button class="icon-button" type="button" (click)="closeDetail.emit()" aria-label="关闭详情">×</button>
+  </header>
+
+  <div class="drawer__body">
+    @if (preview(); as document) {
+      <section class="preview">
+        <div class="preview__toolbar">
+          <button type="button" (click)="closePreview()">← 返回详情</button>
+          <code>{{ document.path }}</code>
+          <button type="button" (click)="copy(document.path)">复制路径</button>
+        </div>
+        <fk-markdown-preview [content]="document.content" />
+      </section>
+    } @else {
+    @if (card.blocked) {
+      <section class="alert">
+        <strong>当前阻塞</strong>
+        <p>{{ card.blockedReason }}</p>
+      </section>
+    }
+
+    <section class="facts" aria-label="流程信息">
+      <div><span>AI 工具</span><p>{{ card.aiTool }}</p></div>
+      <div><span>分支</span><code>{{ card.branch }}</code><button type="button" (click)="copy(card.branch)">复制</button></div>
+      <div>
+        <span>项目路径</span>
+        @if (card.projectPath) {
+          <code>{{ card.projectPath }}</code><button type="button" [disabled]="resourceLoading()" (click)="openProject()">打开项目</button>
+        } @else { <p>未上报项目路径</p> }
+      </div>
+      <div><span>生命周期文档</span><code>{{ card.lifecycleDocumentPath }}</code><button type="button" (click)="copy(card.lifecycleDocumentPath)">复制</button></div>
+      <div>
+        <span>需求文档</span>
+        @if (card.specDocumentPath) {
+          <code>{{ card.specDocumentPath }}</code>
+          <span class="fact-actions"><button type="button" [disabled]="resourceLoading()" (click)="openSpec()">预览</button><button type="button" (click)="copy(card.specDocumentPath)">复制</button></span>
+        } @else { <p>未上报 spec 文档</p> }
+      </div>
+      <div><span>最近同步</span><p>{{ formatDate(card.lastSyncedAt) }}</p></div>
+    </section>
+
+    @if (resourceError()) { <p class="resource-error">{{ resourceError() }}</p> }
+
+    <section class="sessions">
+      <div class="section-title">
+        <h3>AI 会话</h3>
+        <span>{{ card.sessions.length }}</span>
+      </div>
+      <ol>
+        @for (session of card.sessions; track session.sessionRecordId) {
+          <li [class.session--active]="session.active">
+            <div class="session__marker" aria-hidden="true"></div>
+            <div class="session__content">
+              <span class="session__meta">
+                <strong>{{ session.aiTool }}</strong>
+                @if (session.active) { <span>当前会话</span> }
+                <time>{{ formatDate(session.lastSeenAt) }}</time>
+              </span>
+              <code>{{ session.externalSessionId || session.sessionRecordId }}</code>
+              <div class="session__actions">
+                @if (canOpen(session)) {
+                  <button class="primary" type="button" (click)="openSession(session)">打开会话</button>
+                }
+                <button type="button" (click)="copy(session.externalSessionId || session.sessionRecordId)">复制 ID</button>
+              </div>
+            </div>
+          </li>
+        }
+      </ol>
+      @if (host.navigationError()) { <p class="navigation-error">{{ host.navigationError() }}</p> }
+    </section>
+    }
+  </div>
+
+  <footer>
+    <span>{{ card.archived ? "此卡片已归档" : "归档不影响 AI 后续恢复" }}</span>
+    <button type="button" class="archive-button" (click)="archive.emit(!card.archived)">
+      {{ card.archived ? "取消归档" : "归档卡片" }}
+    </button>
+  </footer>
+</aside>

@@ -1,0 +1,33 @@
+<article class="markdown" aria-label="需求文档预览">
+  @for (block of blocks; track $index) {
+    @switch (block.kind) {
+      @case ('heading') {
+        @switch (block.level) {
+          @case (1) { <h1>{{ block.text }}</h1> }
+          @case (2) { <h2>{{ block.text }}</h2> }
+          @case (3) { <h3>{{ block.text }}</h3> }
+          @default { <h4>{{ block.text }}</h4> }
+        }
+      }
+      @case ('paragraph') { <p>{{ block.text }}</p> }
+      @case ('quote') { <blockquote>{{ block.text }}</blockquote> }
+      @case ('rule') { <hr> }
+      @case ('code') { <pre [attr.data-language]="block.language || null"><code>{{ block.text }}</code></pre> }
+      @case ('list') {
+        @if (block.ordered) {
+          <ol>
+            @for (item of block.items; track $index) {
+              <li>@if (item.checked !== undefined) { <input type="checkbox" [checked]="item.checked" disabled> }{{ item.text }}</li>
+            }
+          </ol>
+        } @else {
+          <ul>
+            @for (item of block.items; track $index) {
+              <li>@if (item.checked !== undefined) { <input type="checkbox" [checked]="item.checked" disabled> }{{ item.text }}</li>
+            }
+          </ul>
+        }
+      }
+    }
+  }
+</article>

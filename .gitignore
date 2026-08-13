@@ -1,0 +1,12 @@
+# Local agent artifacts and linked worktrees
+.superpowers/
+.worktrees/
+
+# Node.js and Angular
+node_modules/
+.pnpm-store/
+.angular/
+dist/
+coverage/
+*.log
+.idea/

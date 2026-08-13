@@ -1,0 +1,17 @@
+<article class="card" [class.card--blocked]="card.blocked">
+  <button class="card__open" type="button" (click)="openCard.emit(card.id)" [attr.aria-label]="'查看 ' + card.title">
+    <span class="card__topline">
+      <span class="project">{{ card.projectName }}</span>
+      <span class="sync">{{ relativeTime(card.lastSyncedAt) }}</span>
+    </span>
+    <strong>{{ card.title }}</strong>
+    <span class="progress">{{ progressLabel(card.progress) }}</span>
+    @if (card.blocked || card.waitingForUser) {
+      <span class="flags">
+        @if (card.blocked) { <span class="flag flag--blocked">阻塞</span> }
+        @if (card.waitingForUser) { <span class="flag">等待用户</span> }
+      </span>
+    }
+    <span class="branch" [title]="card.branch">{{ card.branch }}</span>
+  </button>
+</article>
