@@ -52,7 +52,6 @@ export interface VerifiedMacAppBundle {
 export const MAC_REQUIRED_PAYLOAD_FILES = [
   "Contents/Info.plist",
   `Contents/MacOS/${MAC_BUNDLE_EXECUTABLE}`,
-  "Contents/MacOS/FeatureKanbanNode",
   "Contents/Resources/app/server/server/index.js",
   "Contents/Resources/app/server/launcher/index.js",
   "Contents/Resources/app/server/installer/macos-installation.js",
@@ -62,9 +61,22 @@ export const MAC_REQUIRED_PAYLOAD_FILES = [
   "Contents/Resources/app/skills/feature-lifecycle/references/feature-kanban-api.md",
 ] as const;
 
+function assertNoBundledRuntime(paths: Iterable<string>): void {
+  for (const path of paths) {
+    const normalized = path.toLowerCase();
+    if (
+      normalized.includes("/node_modules/@openai/codex/")
+      || /\/node_modules\/@openai\/codex-(?:win32|darwin|linux)-/u.test(normalized)
+      || normalized.includes("/vendor/")
+      || /\/(?:node|codex)(?:\.exe)?$/u.test(normalized)
+    ) {
+      throw new Error(`Package contains a bundled Codex or Node runtime: ${path}`);
+    }
+  }
+}
+
 const executablePayloads = new Set([
   `Contents/MacOS/${MAC_BUNDLE_EXECUTABLE}`,
-  "Contents/MacOS/FeatureKanbanNode",
 ]);
 
 const outerSignedMainExecutable = `Contents/MacOS/${MAC_BUNDLE_EXECUTABLE}`;
@@ -245,11 +257,10 @@ export async function buildMacPackageManifest(
     throw new Error(`Node.js 24.15 or newer in the Node 24 line is required: ${identity.nodeVersion}`);
   }
   const root = resolve(bundleRoot);
-  const runtimeArchitecture = await readThinMachOArchitecture(resolve(root, "Contents", "MacOS", "FeatureKanbanNode"));
   const bootstrapArchitecture = await readThinMachOArchitecture(resolve(root, "Contents", "MacOS", MAC_BUNDLE_EXECUTABLE));
-  if (runtimeArchitecture !== identity.architecture || bootstrapArchitecture !== identity.architecture) {
+  if (bootstrapArchitecture !== identity.architecture) {
     throw new Error(
-      `macOS package architecture mismatch: requested ${identity.architecture}, runtime ${runtimeArchitecture}, bootstrap ${bootstrapArchitecture}`,
+      `macOS package architecture mismatch: requested ${identity.architecture}, bootstrap ${bootstrapArchitecture}`,
     );
   }
   return {
@@ -328,6 +339,7 @@ export async function verifyMacAppBundle(bundleRoot: string): Promise<VerifiedMa
   for (const required of MAC_REQUIRED_PAYLOAD_FILES) {
     if (!seen.has(required)) throw new Error(`Required macOS package file is absent from manifest: ${required}`);
   }
+  assertNoBundledRuntime(seen);
   for (const executable of executablePayloads) {
     const entry = manifest.files.find((candidate) => candidate.path === executable);
     if (!entry || (entry.mode & 0o111) === 0) throw new Error(`Required executable mode is absent: ${executable}`);
@@ -345,9 +357,8 @@ export async function verifyMacAppBundle(bundleRoot: string): Promise<VerifiedMa
     if (actual.size !== expected.size) throw new Error(`Package manifest size mismatch: ${actual.path}`);
     if (actual.sha256 !== expected.sha256) throw new Error(`Package manifest hash mismatch: ${actual.path}`);
   }
-  const runtimeArchitecture = await readThinMachOArchitecture(resolve(root, "Contents", "MacOS", "FeatureKanbanNode"));
   const bootstrapArchitecture = await readThinMachOArchitecture(resolve(root, "Contents", "MacOS", MAC_BUNDLE_EXECUTABLE));
-  if (runtimeArchitecture !== manifest.architecture || bootstrapArchitecture !== manifest.architecture) {
+  if (bootstrapArchitecture !== manifest.architecture) {
     throw new Error("Package manifest architecture does not match its executable payload");
   }
   validateInfoPlist(await readFile(resolve(root, "Contents", "Info.plist"), "utf8"), manifest);

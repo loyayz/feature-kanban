@@ -53,7 +53,7 @@ npm run build:installer
 
 安装器让用户选择本地程序父目录，默认安装到 `%LOCALAPPDATA%\Feature Kanban`；数据固定在 `%USERPROFILE%\.feature-kanban`，Skill 只安装到 `%USERPROFILE%\.agents\skills\feature-lifecycle`。不要在开发测试中执行安装器；安装逻辑通过包含空格、中文和符号的临时目录验证。
 
-macOS 在对应硬件上运行 `npm run check:macos`，输出 `FeatureKanban-<版本>-macos-arm64[-unsigned].dmg` 或 `FeatureKanban-<版本>-macos-x64[-unsigned].dmg`。构建会复制启动本次 npm 的 nvm current Node 到私有目录；不会修改或签名原始 Node。未配置完整 Developer ID 与公证凭据时只产生明确标记的开发用 unsigned DMG，不可作为正式发行包。安装、签名、公证和真实 ChatGPT/Codex 验收步骤见安装文档。
+macOS 在对应硬件上运行 `npm run check:macos`，输出 `FeatureKanban-<版本>-macos-arm64[-unsigned].dmg` 或 `FeatureKanban-<版本>-macos-x64[-unsigned].dmg`。应用使用本机 Node.js 24 或更高版本，安装包不携带或签名 Node.js/Codex 运行时。未配置完整 Developer ID 与公证凭据时只产生明确标记的开发用 unsigned DMG，不可作为正式发行包。安装、签名、公证和真实 ChatGPT/Codex 验收步骤见安装文档。
 
 ## 文档
 

@@ -41,8 +41,9 @@ export class NativeLocalCardResources implements LocalCardResources {
     if (!stats.isDirectory()) throw new LocalResourceValidationError("Project path is not a directory");
     const command = this.platform === "win32" ? "explorer.exe" : this.platform === "darwin" ? "open" : undefined;
     if (!command) throw new UnsupportedPlatformError("Opening project folders is unsupported on this platform");
+    const args = this.platform === "win32" ? ["/n,", path] : [path];
     await new Promise<void>((resolveOpen, rejectOpen) => {
-      const child = this.spawnProcess(command, [path], {
+      const child = this.spawnProcess(command, args, {
         detached: true,
         stdio: "ignore",
         windowsHide: true,

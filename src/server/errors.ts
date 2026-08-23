@@ -5,3 +5,7 @@ export class LocalResourceNotFoundError extends Error {}
 export class LocalResourceValidationError extends Error {}
 export class LocalResourceOperationError extends Error {}
 export class UnsupportedPlatformError extends Error {}
+export class CodexTaskProjectError extends Error {}
+export class CodexTaskBusyError extends Error {}
+export class CodexRuntimeUnavailableError extends Error {}
+export class CodexProtocolError extends Error {}

@@ -20,7 +20,6 @@ export interface MacTestFixture {
   repoRoot: string;
   outputBase: string;
   architecture: MacArchitecture;
-  runtimePath: string;
   bootstrapPath: string;
   stage(): Promise<StagedMacApp>;
   setPackagedSkill(contents: string): void;
@@ -29,9 +28,7 @@ export interface MacTestFixture {
 export function createMacTestFixture(root: string, architecture: MacArchitecture = "arm64"): MacTestFixture {
   const repoRoot = resolve(root, "repo");
   const outputBase = resolve(root, "Applications");
-  const runtimePath = resolve(root, "inputs", "node");
   const bootstrapPath = resolve(root, "inputs", "FeatureKanbanBootstrap");
-  writeFixtureFile(runtimePath, thinMachO(architecture));
   writeFixtureFile(bootstrapPath, thinMachO(architecture));
   writeFixtureFile(resolve(repoRoot, "dist", "server", "server", "index.js"), "server");
   writeFixtureFile(resolve(repoRoot, "dist", "server", "launcher", "index.js"), "launcher");
@@ -52,7 +49,6 @@ export function createMacTestFixture(root: string, architecture: MacArchitecture
     repoRoot,
     outputBase,
     architecture,
-    runtimePath,
     bootstrapPath,
     stage: () => stageMacApp({
       repoRoot,
@@ -60,7 +56,6 @@ export function createMacTestFixture(root: string, architecture: MacArchitecture
       architecture,
       productVersion: "0.1.0",
       nodeVersion: "v24.15.0",
-      runtimePath,
       bootstrapPath,
     }),
     setPackagedSkill: (contents) => {

@@ -38,24 +38,23 @@ function repositoryFixture(t: TestContext): CardRepository {
   return new CardRepository(database.connection);
 }
 
-test("POST retry returns the existing card without overwriting snapshot or archive state", (t) => {
+test("POST retry returns the existing card without overwriting completed snapshot or archive state", (t) => {
   const repository = repositoryFixture(t);
   const first = repository.createCard(base);
   assert.equal(first.created, true);
   repository.updateCard(base.cardId, {
-    stage: "requirements_review",
-    progress: { stage: "requirements_review", step: "reviewing" },
-    waitingForUser: true,
+    stage: "completed",
+    progress: { stage: "completed", step: "integrated" },
+    waitingForUser: false,
     blocked: false,
     aiTool: "codex",
     branch: base.branch,
     session: base.session,
   });
-  repository.setArchived(base.cardId, true);
 
   const retried = repository.createCard(base);
   assert.equal(retried.created, false);
-  assert.equal(retried.card.stage, "requirements_review");
+  assert.equal(retried.card.stage, "completed");
   assert.equal(retried.card.archived, true);
   assert.equal(retried.card.projectPath, base.projectPath);
 });
@@ -100,7 +99,16 @@ test("rejects malformed lifecycle progress read from storage", (t) => {
 test("last PATCH may regress stage, restores an archived card, and preserves session history", (t) => {
   const repository = repositoryFixture(t);
   repository.createCard(base);
-  repository.setArchived(base.cardId, true);
+  const completed = repository.updateCard(base.cardId, {
+    stage: "completed",
+    progress: { stage: "completed", step: "integrated" },
+    waitingForUser: false,
+    blocked: false,
+    aiTool: "codex",
+    branch: base.branch,
+    session: base.session,
+  });
+  assert.equal(completed.archived, true);
   const beforePatch = repository.getCard(base.cardId);
 
   const update: UpdateCardInput = {
@@ -116,7 +124,8 @@ test("last PATCH may regress stage, restores an archived card, and preserves ses
       aiTool: "claude",
     },
   };
-  repository.updateCard(base.cardId, update);
+  const reactivated = repository.updateCard(base.cardId, update);
+  assert.equal(reactivated.archived, false);
   const regressed = repository.updateCard(base.cardId, {
     ...update,
     stage: "designing",
@@ -139,7 +148,15 @@ test("persists project visibility separately from card archive counts", (t) => {
   assert.equal(repository.listProjects()[0]?.hidden, false);
   assert.equal(repository.setProjectHidden(base.projectName, true).hidden, true);
   assert.equal(repository.listProjects()[0]?.hidden, true);
-  repository.setArchived(base.cardId, true);
+  repository.updateCard(base.cardId, {
+    stage: "completed",
+    progress: { stage: "completed", step: "integrated" },
+    waitingForUser: false,
+    blocked: false,
+    aiTool: "codex",
+    branch: base.branch,
+    session: base.session,
+  });
   assert.deepEqual(repository.listProjects()[0], {
     name: base.projectName,
     activeCount: 0,
@@ -147,6 +164,27 @@ test("persists project visibility separately from card archive counts", (t) => {
     hidden: true,
   });
   assert.throws(() => repository.setProjectHidden("missing", true), /Project not found/);
+});
+
+test("lists distinct stored paths for a project without changing project aggregation", (t) => {
+  const repository = repositoryFixture(t);
+  repository.createCard(base);
+  repository.createCard({
+    ...base,
+    cardId: "260ab8ce-dc3e-45b6-bfb6-79acd34ad7fd",
+    lifecycleDocumentPath: "C:\\repo\\docs\\feature\\second.md",
+    session: { sessionRecordId: "8362030f-5f20-4577-9c0f-84ec84252db4", aiTool: "codex" },
+  });
+  repository.createCard({
+    ...base,
+    cardId: "cb578b75-daad-4bc0-aaed-22a33d234a52",
+    projectPath: "D:\\other-repo",
+    lifecycleDocumentPath: "D:\\other-repo\\docs\\feature\\third.md",
+    session: { sessionRecordId: "8cac0846-b45c-4366-b9dd-763f238bd6e8", aiTool: "codex" },
+  });
+  assert.deepEqual(repository.listProjectPaths(base.projectName), ["C:\\repo", "D:\\other-repo"]);
+  assert.deepEqual(repository.listProjectPaths("missing"), []);
+  assert.equal(repository.listProjects().length, 1);
 });
 
 test("migrates legacy card tables with nullable project and spec paths", (t) => {
@@ -175,13 +213,34 @@ test("migrates legacy card tables with nullable project and spec paths", (t) => 
   assert.doesNotThrow(() => migrated.connection.prepare("SELECT * FROM project_preferences").all());
 });
 
-test("archive changes updatedAt but not lastSyncedAt", async (t) => {
+test("completed create and update snapshots archive cards as part of synchronization", async (t) => {
   const repository = repositoryFixture(t);
   const created = repository.createCard(base).card;
   await new Promise((resolve) => setTimeout(resolve, 2));
-  const archived = repository.setArchived(base.cardId, true);
-  assert.equal(archived.lastSyncedAt, created.lastSyncedAt);
+  const archived = repository.updateCard(base.cardId, {
+    stage: "completed",
+    progress: { stage: "completed", step: "integrated" },
+    waitingForUser: false,
+    blocked: false,
+    aiTool: "codex",
+    branch: base.branch,
+    session: base.session,
+  });
+  assert.equal(archived.archived, true);
+  assert.notEqual(archived.lastSyncedAt, created.lastSyncedAt);
   assert.notEqual(archived.updatedAt, created.updatedAt);
+
+  const createdCompleted = repository.createCard({
+    ...base,
+    cardId: "260ab8ce-dc3e-45b6-bfb6-79acd34ad7fd",
+    lifecycleDocumentPath: "C:\\repo\\docs\\feature\\completed.md",
+    stage: "completed",
+    progress: { stage: "completed", step: "integrated" },
+    session: { sessionRecordId: "8362030f-5f20-4577-9c0f-84ec84252db4", aiTool: "codex" },
+  }).card;
+  assert.equal(createdCompleted.archived, true);
+  assert.equal(repository.listCards({ archived: true }).length, 2);
+  assert.equal(repository.listCards({ archived: false }).length, 0);
 });
 
 test("an anonymous session can continue and later retain a discovered external ID", (t) => {

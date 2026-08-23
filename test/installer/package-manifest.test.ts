@@ -7,10 +7,11 @@ import test from "node:test";
 import { verifyWindowsPackage } from "../../scripts/verify-windows-package.js";
 
 const required = [
-  "runtime/node.exe", "app/server/server/index.js", "app/server/server/standalone.js", "app/server/launcher/index.js",
+  "app/server/server/index.js", "app/server/server/standalone.js", "app/server/launcher/index.js",
   "app/web/browser/index.html", "app/inject/feature-kanban.user.js",
   "app/skills/feature-lifecycle/SKILL.md",
   "app/skills/feature-lifecycle/references/feature-kanban-api.md",
+  "app/skills/feature-lifecycle/references/stage-5-integration.md",
   "installer/install.ps1", "installer/launch-codex-hidden.vbs", "installer/uninstall.ps1",
 ];
 
@@ -48,8 +49,29 @@ test("verifies every staged file hash and the installer recovery contract", () =
       formatVersion: 1, product: "feature-kanban", nodeVersion: "v24.15.0", files,
     }), "utf8");
     assert.deepEqual(verifyWindowsPackage(root), { fileCount: required.length, nodeVersion: "v24.15.0" });
+    const withoutStageFive = files.filter((entry) => !entry.path.endsWith("stage-5-integration.md"));
+    writeFileSync(resolve(root, "package-manifest.json"), JSON.stringify({
+      formatVersion: 1, product: "feature-kanban", nodeVersion: "v24.15.0", files: withoutStageFive,
+    }), "utf8");
+    assert.throws(() => verifyWindowsPackage(root), /stage-5-integration\.md/);
+    writeFileSync(resolve(root, "package-manifest.json"), JSON.stringify({
+      formatVersion: 1, product: "feature-kanban", nodeVersion: "v24.15.0", files,
+    }), "utf8");
     writeFileSync(resolve(root, required[0]!), "tampered", "utf8");
     assert.throws(() => verifyWindowsPackage(root), /mismatch/);
+
+    writeFileSync(resolve(root, required[0]!), required[0]!, "utf8");
+    const forbidden = "app/node_modules/@openai/codex/vendor/x86_64-pc-windows-msvc/codex.exe";
+    mkdirSync(dirname(resolve(root, forbidden)), { recursive: true });
+    writeFileSync(resolve(root, forbidden), "runtime", "utf8");
+    files.push({ path: forbidden, size: statSync(resolve(root, forbidden)).size, sha256: hash(resolve(root, forbidden)) });
+    files[0] = {
+      path: required[0]!, size: statSync(resolve(root, required[0]!)).size, sha256: hash(resolve(root, required[0]!)),
+    };
+    writeFileSync(resolve(root, "package-manifest.json"), JSON.stringify({
+      formatVersion: 1, product: "feature-kanban", nodeVersion: "v24.15.0", files,
+    }), "utf8");
+    assert.throws(() => verifyWindowsPackage(root), /bundled Codex or Node runtime/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -87,13 +109,20 @@ test("IExpress template launches the extracted PowerShell bootstrap", () => {
   assert.doesNotMatch(installScript, /\.codex\\skills\\feature-lifecycle|\.claude\\skills\\feature-lifecycle/);
   const hiddenLauncher = readFileSync(resolve(process.cwd(), "installer/launch-codex-hidden.vbs"), "utf8");
   assert.match(hiddenLauncher, /Environment\("Process"\)\("FEATURE_KANBAN_INSTALL_ROOT"\)/);
+  assert.match(hiddenLauncher, /FEATURE_KANBAN_NODE_PATH/);
+  assert.match(hiddenLauncher, /nodePath = "node"/);
+  assert.match(hiddenLauncher, /requires local Node\.js 24 or newer/);
+  assert.doesNotMatch(hiddenLauncher, /runtime\\node\.exe/);
   assert.match(hiddenLauncher, /shell\.Run\(command, 0, True\)/);
+  assert.match(hiddenLauncher, /shell\.Popup/);
   assert.match(hiddenLauncher, /WScript\.Quit exitCode/);
   const uninstallScript = readFileSync(uninstallScriptPath, "utf8");
   assert.match(uninstallScript, /启动 Codex 与任务看板\.lnk/);
   assert.match(uninstallScript, /启动任务看板服务\.lnk/);
   assert.match(uninstallScript, /Feature Kanban\\Codex\.lnk/);
   assert.doesNotMatch(uninstallScript, /\.codex\\skills\\feature-lifecycle|\.claude\\skills\\feature-lifecycle/);
+  assert.doesNotMatch(buildScript, /Copy-Item[^\n]+runtime\\node\.exe/);
+  assert.doesNotMatch(installScript, /@\('app', 'runtime', 'installer'\)/);
 });
 
 test("default quality gate excludes release packaging", () => {

@@ -25,7 +25,7 @@ test("opens an existing project with the platform file manager", async () => {
     await new NativeLocalCardResources("win32", spawner).openProject(directory);
     await new NativeLocalCardResources("darwin", spawner).openProject(directory);
     assert.deepEqual(calls, [
-      { command: "explorer.exe", args: [directory] },
+      { command: "explorer.exe", args: ["/n,", directory] },
       { command: "open", args: [directory] },
     ]);
   } finally {

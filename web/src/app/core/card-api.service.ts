@@ -6,6 +6,7 @@ import type {
   CardDetail,
   CardFilters,
   CardSummary,
+  CreateCodexTaskResponse,
   ProjectChangedEvent,
   ProjectSummary,
   SpecDocumentResponse,
@@ -21,8 +22,7 @@ function boardChange(value: unknown): BoardNotification | undefined {
   const record = value as Record<string, unknown>;
   if (
     (record["type"] === "card.created" ||
-      record["type"] === "card.updated" ||
-      record["type"] === "card.archived") &&
+      record["type"] === "card.updated") &&
     typeof record["cardId"] === "string"
   ) return { kind: "card", event: record as unknown as CardChangedEvent };
   if (record["type"] === "project.updated" && typeof record["projectName"] === "string") {
@@ -73,19 +73,6 @@ export class CardApiService {
     });
   }
 
-  setArchived(cardId: string, archived: boolean): Observable<CardDetail> {
-    return new Observable((subscriber) => {
-      const subscription = this.http
-        .patch<{ card: CardDetail }>(`/api/cards/${encodeURIComponent(cardId)}/archive`, { archived })
-        .subscribe({
-          next: ({ card }) => subscriber.next(card),
-          error: (error: unknown) => subscriber.error(error),
-          complete: () => subscriber.complete(),
-        });
-      return () => subscription.unsubscribe();
-    });
-  }
-
   setProjectHidden(projectName: string, hidden: boolean): Observable<ProjectSummary> {
     return new Observable((subscriber) => {
       const subscription = this.http
@@ -108,6 +95,10 @@ export class CardApiService {
 
   getSpecDocument(cardId: string): Observable<SpecDocumentResponse> {
     return this.http.get<SpecDocumentResponse>(`/api/cards/${encodeURIComponent(cardId)}/spec-document`);
+  }
+
+  createCodexTask(projectName: string, prompt: string): Observable<CreateCodexTaskResponse> {
+    return this.http.post<CreateCodexTaskResponse>("/api/codex/tasks", { projectName, prompt });
   }
 
   notifications(): Observable<BoardNotification> {

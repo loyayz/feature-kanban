@@ -2,14 +2,21 @@ import { existsSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import {
-  validateArchiveBody,
+  validateCreateCodexTask,
+} from "../shared/codex-task-validation.js";
+import {
   validateCreateCard,
   validateProjectVisibilityBody,
   validateUpdateCard,
 } from "../shared/lifecycle-validation.js";
 import type { HealthResponse } from "../shared/lifecycle-contract.js";
 import type { CardRepository } from "./card-repository.js";
+import type { CodexTaskCoordinator } from "./codex-task-runner.js";
 import {
+  CodexProtocolError,
+  CodexRuntimeUnavailableError,
+  CodexTaskBusyError,
+  CodexTaskProjectError,
   ConflictError,
   LocalResourceNotFoundError,
   LocalResourceOperationError,
@@ -35,6 +42,7 @@ export interface RouteDependencies {
   staticDirectory: string;
   version: string;
   localResources: LocalCardResources;
+  codexTasks: CodexTaskCoordinator;
 }
 
 function parseArchived(value: string | null): boolean {
@@ -72,6 +80,10 @@ function handleFailure(response: ServerResponse, error: unknown): void {
   if (error instanceof UnsupportedPlatformError) return sendError(response, 501, error.message);
   if (error instanceof LocalResourceOperationError) return sendError(response, 500, error.message);
   if (error instanceof ConflictError) return sendError(response, 409, error.message);
+  if (error instanceof CodexTaskProjectError) return sendError(response, 409, error.message);
+  if (error instanceof CodexTaskBusyError) return sendError(response, 409, error.message);
+  if (error instanceof CodexRuntimeUnavailableError) return sendError(response, 503, error.message);
+  if (error instanceof CodexProtocolError) return sendError(response, 502, error.message);
   if (error instanceof ValidationStorageError) return sendError(response, 500, error.message);
   console.error(error);
   sendError(response, 500, "Internal server error");
@@ -133,6 +145,13 @@ export function createRequestHandler(dependencies: RouteDependencies) {
         sendJson(response, result.created ? 201 : 200, { card: result.card, created: result.created });
         return;
       }
+      if (request.method === "POST" && pathname === "/api/codex/tasks") {
+        const validation = validateCreateCodexTask(await readJsonBody(request));
+        if (!validation.ok) return sendError(response, 400, "Invalid Codex task", validation.errors);
+        const task = await dependencies.codexTasks.create(validation.value.projectName, validation.value.prompt);
+        sendJson(response, 202, task);
+        return;
+      }
 
       const projectName = projectNameFrom(pathname);
       if (request.method === "PATCH" && projectName) {
@@ -159,16 +178,6 @@ export function createRequestHandler(dependencies: RouteDependencies) {
         const card = dependencies.repository.getCard(specDocumentCardId);
         if (!card.specDocumentPath) throw new NotFoundError("Spec document path is unavailable");
         sendJson(response, 200, await dependencies.localResources.readSpec(card.specDocumentPath));
-        return;
-      }
-
-      const archiveCardId = cardIdFrom(pathname, "archive");
-      if (request.method === "PATCH" && archiveCardId) {
-        const validation = validateArchiveBody(await readJsonBody(request));
-        if (!validation.ok) return sendError(response, 400, "Invalid archive request", validation.errors);
-        const card = dependencies.repository.setArchived(archiveCardId, validation.value.archived);
-        dependencies.eventHub.publish({ type: "card.archived", cardId: card.id });
-        sendJson(response, 200, { card });
         return;
       }
 

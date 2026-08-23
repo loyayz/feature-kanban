@@ -1,14 +1,32 @@
 import { ChangeDetectionStrategy, Component, Input } from "@angular/core";
 
+export type MarkdownInlineToken =
+  | { kind: "text"; text: string }
+  | { kind: "inline-code"; text: string };
+
 export type MarkdownBlock =
-  | { kind: "heading"; level: number; text: string }
-  | { kind: "paragraph"; text: string }
-  | { kind: "quote"; text: string }
+  | { kind: "heading"; level: number; content: MarkdownInlineToken[] }
+  | { kind: "paragraph"; content: MarkdownInlineToken[] }
+  | { kind: "quote"; content: MarkdownInlineToken[] }
   | { kind: "rule" }
   | { kind: "code"; language: string; text: string }
-  | { kind: "list"; ordered: boolean; items: Array<{ text: string; checked?: boolean }> };
+  | { kind: "list"; ordered: boolean; items: Array<{ content: MarkdownInlineToken[]; checked?: boolean }> };
 
 const blockStart = /^(?:#{1,6}\s+|```|>\s?|\s*(?:[-*+] |\d+\. )|\s*(?:---+|\*\*\*+)\s*$)/;
+
+export function parseInlineMarkdown(text: string): MarkdownInlineToken[] {
+  const tokens: MarkdownInlineToken[] = [];
+  const pattern = /`([^`\r\n]+)`/g;
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index;
+    if (start > cursor) tokens.push({ kind: "text", text: text.slice(cursor, start) });
+    tokens.push({ kind: "inline-code", text: match[1] ?? "" });
+    cursor = start + match[0].length;
+  }
+  if (cursor < text.length) tokens.push({ kind: "text", text: text.slice(cursor) });
+  return tokens;
+}
 
 export function parseMarkdown(content: string): MarkdownBlock[] {
   const lines = content.replaceAll("\r\n", "\n").split("\n");
@@ -28,7 +46,7 @@ export function parseMarkdown(content: string): MarkdownBlock[] {
     }
     const heading = line.match(/^(#{1,6})\s+(.*)$/);
     if (heading) {
-      blocks.push({ kind: "heading", level: heading[1]!.length, text: heading[2] ?? "" });
+      blocks.push({ kind: "heading", level: heading[1]!.length, content: parseInlineMarkdown(heading[2] ?? "") });
       index += 1;
       continue;
     }
@@ -42,18 +60,18 @@ export function parseMarkdown(content: string): MarkdownBlock[] {
       while (index < lines.length && /^>\s?/.test(lines[index] ?? "")) {
         quote.push((lines[index++] ?? "").replace(/^>\s?/, ""));
       }
-      blocks.push({ kind: "quote", text: quote.join("\n") });
+      blocks.push({ kind: "quote", content: parseInlineMarkdown(quote.join("\n")) });
       continue;
     }
     const listItem = line.match(/^\s*([-*+]|\d+\.)\s+(?:\[([ xX])\]\s+)?(.*)$/);
     if (listItem) {
       const ordered = /\d+\./.test(listItem[1] ?? "");
-      const items: Array<{ text: string; checked?: boolean }> = [];
+      const items: Array<{ content: MarkdownInlineToken[]; checked?: boolean }> = [];
       while (index < lines.length) {
         const item = (lines[index] ?? "").match(/^\s*([-*+]|\d+\.)\s+(?:\[([ xX])\]\s+)?(.*)$/);
         if (!item || /\d+\./.test(item[1] ?? "") !== ordered) break;
         items.push({
-          text: item[3] ?? "",
+          content: parseInlineMarkdown(item[3] ?? ""),
           ...(item[2] !== undefined ? { checked: item[2].toLowerCase() === "x" } : {}),
         });
         index += 1;
@@ -66,7 +84,7 @@ export function parseMarkdown(content: string): MarkdownBlock[] {
     while (index < lines.length && lines[index]?.trim() && !blockStart.test(lines[index] ?? "")) {
       paragraph.push((lines[index++] ?? "").trim());
     }
-    blocks.push({ kind: "paragraph", text: paragraph.join(" ") });
+    blocks.push({ kind: "paragraph", content: parseInlineMarkdown(paragraph.join(" ")) });
   }
   return blocks;
 }

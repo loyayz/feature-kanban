@@ -76,7 +76,8 @@ export class ServiceSupervisor {
 export function installedServiceRuntime(
   installRoot: string,
   parentEnvironment: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
+  _platform: NodeJS.Platform = process.platform,
+  nodeExecutable = process.execPath,
 ): ServiceRuntime {
   const environment = { ...parentEnvironment };
   delete environment.FEATURE_KANBAN_HOST;
@@ -84,9 +85,7 @@ export function installedServiceRuntime(
   delete environment.FEATURE_KANBAN_DATA_DIR;
   return {
     healthUrl: "http://127.0.0.1:46171/api/health",
-    nodeExecutable: platform === "win32"
-      ? resolve(installRoot, "runtime", "node.exe")
-      : resolve(installRoot, "..", "MacOS", "FeatureKanbanNode"),
+    nodeExecutable,
     serverEntry: resolve(installRoot, "app", "server", "server", "index.js"),
     environment: {
       ...environment,
@@ -94,4 +93,11 @@ export function installedServiceRuntime(
       FEATURE_KANBAN_VERSION: "0.1.0",
     },
   };
+}
+
+export function assertSupportedNodeRuntime(version = process.versions.node): void {
+  const match = /^(\d+)\.(\d+)\.(\d+)/u.exec(version);
+  if (!match || Number(match[1]) < 24) {
+    throw new Error(`Feature Kanban requires local Node.js 24 or newer; found ${version}`);
+  }
 }

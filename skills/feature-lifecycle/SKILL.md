@@ -1,15 +1,23 @@
 ---
 name: feature-lifecycle
-description: Use when 用户要求实现、开发、添加新功能，或要求从设计到合入、端到端、全生命周期交付；覆盖所有新功能开发场景，即使请求仅是“帮我实现/加一个功能”也必须先用本技能编排全流程。
+description: Use only when the user explicitly asks to invoke feature-lifecycle for feature implementation or end-to-end delivery; do not invoke it for ordinary feature requests.
 ---
 
 # Feature Lifecycle — 需求实现全生命周期
 
 ## 核心约定
 
+### 启动门禁
+
+本 skill 只允许显式调用。仅当用户在当前请求中明确要求“使用/调用 `feature-lifecycle`”或输入 `$feature-lifecycle` 时，才启动新流程或恢复旧流程。仅提出实现、开发、添加功能或端到端交付，提及、讨论、评审或修改本 skill，以及过去会话曾启动过流程，都不构成当前调用。
+
+未满足显式调用条件时，本 skill 视为未启动：不得检查其依赖、扫描或创建 worktree、创建生命周期文档、调用 Feature Kanban API，也不得执行下文任何 Phase 或 Stage；按当前任务的其他适用规则处理。
+
 在独立 feature worktree 中按顺序完成信息收集、生命周期文档、方案设计、需求评审、实现计划、编码与评审修复、单提交整理及 rebase。除本技能明确要求确认或暂停外自动推进；升级执行方式或预算必须先获用户明确确认。
 
-Feature Kanban 是该生命周期的可选本地投影，不是 Git、worktree、生命周期 checkbox 或阶段决策的权威。创建生命周期文档和首次上报前完整读取 [Feature Kanban API reference](references/feature-kanban-api.md)；服务不可用不得阻塞本地流程。
+一旦 `feature-lifecycle` 启动，它就是从创建 worktree 到合入、清理的唯一流程编排者。不得因其他流程型 skill 的通用触发描述自动调用。只有本文件明确要求调用的流程型 skill，才能在指定 Stage 调用。领域或工具型 skill 只能作为当前 Stage 内的执行手段，不得接管阶段、增加门禁、改变确认点或扩展授权范围。
+
+Feature Kanban 是该生命周期的非阻塞本地投影，不是 Git、worktree、生命周期 checkbox 或阶段决策的权威。创建生命周期文档和首次上报前完整读取 [Feature Kanban API reference](references/feature-kanban-api.md)；规定的接口调用不可省略，但服务不可用不得阻塞本地流程。
 
 ### 运行环境
 
@@ -17,11 +25,15 @@ Feature Kanban 是该生命周期的可选本地投影，不是 Git、worktree�
 - “项目指令文件”包括当前环境识别的仓库/目录规则（如 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`）；读取根规则及目标目录最近的局部规则，局部优先并与上层叠加。
 - 代码评审使用当前环境可用的原生工具、代理或内置能力及足以理解改动的常规强度；始终遵守本技能的范围、证据门槛和报告格式，不得借更高强度扩大范围或深挖理论边界。
 
-### 依赖与异常 skill
+### 必需 skills
 
 启动时检查全部必需 skills：Stage 1 `superpowers:brainstorming`、Stage 2 `grill-with-docs`、Stage 3 `superpowers:writing-plans`、Stage 4 `superpowers:receiving-code-review`。任一缺失，列出缺失项及适合当前环境的安装方式后暂停。
 
-`pua:pua` 不是启动依赖，只在下文规定的重复失败、证据缺失、被动停滞或质量不达标时检查并用于 RCA；缺失时报告并以已有证据继续定位，不阻塞无关阶段。正常流程不得默认调用 PUA，不得用 `pua:shot`、`pua:p7`、`pua:p9` 或 `pua:p10` 替代主流程或角色（用户明确要求相应模式除外），也不得自动执行 `/pua:flavor` 或等价持久化命令。
+### 流程型 skill 调用守卫
+
+调用任何其他流程型 skill 前，必须先检查本文件是否已经覆盖当前 Phase 或 Stage。已覆盖时禁止调用；其他 skill 的 description、通用触发条件或默认收尾规则不能覆盖本生命周期的显式规则。流程型 skill 包括会接管设计、计划、实施方式、调试、评审、验证、分支收尾、worktree 或清理决策的 skill。
+
+允许的流程型 skill 仅限：Stage 1 `superpowers:brainstorming`、Stage 2 `grill-with-docs`、Stage 3 `superpowers:writing-plans`、Stage 4 `superpowers:receiving-code-review`；Stage 4 仅在已批准计划或当前任务明确选择时可调用 `superpowers:executing-plans`。调用前必须再次核对当前 Stage 和对应条件，不得提前、延后或因其他 skill 自动触发而追加调用。
 
 ### 执行方式与预算
 
@@ -31,9 +43,11 @@ Feature Kanban 是该生命周期的可选本地投影，不是 Git、worktree�
 
 Stage 4 专用 reviewer 属于固定门禁，不是 Subagent-Driven 实施且不占实现子代理预算：默认仅首轮一次、单 reviewer 候选扫描；不得跨轮复用、擅自增加或替代主代理自审。额外独立评审同样需要用户明确要求。
 
-### 过程文档与产物格式
+### 过程文件与产物格式
 
-`docs/feature/`、`docs/review/`、`docs/superpowers/plans/` 是过程文档：feature worktree 存续期间必须保留并更新，禁止 `git add`、进入任何提交或为清洁工作树而删除；只有 Stage 5 已告知后果且用户同意整合和清理时，才随 worktree 删除。`docs/superpowers/specs/` 及用户明确要求交付的需求/产品文档不在此列，按交付要求决定是否提交。
+过程文件是本次生命周期仅为流程编排、AI handoff、评审、诊断或验证而创建或修改，且不属于最终交付的文件或目录。除 `docs/feature/` 下的生命周期文档、`docs/review/` 下的评审报告和 `docs/superpowers/plans/` 下的实现计划外，还包括实际产生的逐任务说明/报告、差异包、评审包、临时诊断记录、scratch 文件以及构建或测试中间产物；路径和命名不影响其过程文件身份。`docs/superpowers/specs/` 及用户明确要求交付的需求、产品或其他文档不在此列，按交付要求决定是否提交；不得把已有用户文件或归属不明的路径自行认定为过程文件。
+
+生命周期文档中的“过程文件清单”是唯一清理白名单。清单可以登记精确文件，也可以登记目录。对由构建、测试或代码生成工具独占且整体可重建的专用输出目录（如模块内的 `target/`、`build/`、`dist/`、`coverage/`），直接登记该目录的仓库相对路径和用途，目录内文件无需逐项登记；用项目配置、ignore 规则、执行命令或创建前后状态确认其确为工具专用输出。对同时容纳用户文件、交付内容或归属不明内容的混合目录，只登记归属明确的更窄子目录或精确文件。禁止用宽泛 glob 代替可核对的文件或目录路径。创建或修改过程路径时立即更新清单，Stage 5 前再用 Git 状态和流程记录补全、核对。清单中的全部路径在 feature worktree 存续期间必须保留，禁止进入任何提交或为清洁工作树提前删除；只有 Stage 5 已逐项披露且用户同意整合和清理时，才随 worktree 全部删除。
 
 实现计划和评审报告是 AI-to-AI handoff artifact：项目规定语言时从其规定，否则默认 English；标识符、路径、命令、错误和既有领域术语保持原文，不重复双语。按任务/文件或发现使用可独立理解的弱结构自然语言；禁止 JSON、表格、固定字段模板及无助于下游决策的元数据。
 
@@ -51,7 +65,7 @@ Stage 4 专用 reviewer 属于固定门禁，不是 Subagent-Driven 实施且不
 
 用户选择重启时只归档旧生命周期文档，不得自动删除旧 worktree 或分支。文档 checkbox 是唯一进度来源；每个 Stage 完成后立即更新，并持续记录当前 worktree、分支、base、评审轮次和未解决风险。
 
-流程为：信息收集 → 创建 feature worktree → 生成生命周期文档 → Stage 1 brainstorming → Stage 2 grill-with-docs → Stage 3 writing-plans → Stage 4 编码/评审/验证/修复 → Stage 5 squash/rebase。规定的异常触发 `pua:pua + RCA`。
+流程为：信息收集 → 创建 feature worktree → 生成生命周期文档 → Stage 1 brainstorming → Stage 2 grill-with-docs → Stage 3 writing-plans → Stage 4 编码/评审/验证/修复 → Stage 5 squash/rebase。单个确认缺陷重复修复失败时触发 Stage 4 内建 RCA 升级协议。
 
 ## Phase 1：信息收集与创建 worktree
 
@@ -100,19 +114,19 @@ Stage 4 专用 reviewer 属于固定门禁，不是 Subagent-Driven 实施且不
 
 ## Phase 3：执行生命周期
 
-各 Stage 按序自动推进，仅在规则明确要求确认时暂停。执行任何构建、测试或代码修改前，先读取仓库根和目标模块适用的项目指令。构建命令优先级：项目指令指定命令/工具路径 → README、构建脚本、CI → Maven 项目使用 Maven wrapper、IDE Maven 或 `mvn` → Gradle 项目使用 `gradlew`、IDE Gradle 或 `gradle` → 按项目文件判断其他工具；无法可靠判断才询问。项目指令的语义变量若非环境变量，必须从配置解析实际路径，不能直接作为 shell 环境变量。
+各 Stage 按序自动推进，仅在规则明确要求确认时暂停。执行任何构建、测试或代码修改前，先读取仓库根和目标模块适用的项目指令。构建命令优先级：项目指令指定命令/工具路径 → README、构建脚本、CI → Maven 项目使用 Maven wrapper、IDE Maven 或 `mvn` → Gradle 项目使用 `gradlew`、IDE Gradle 或 `gradle` → 按项目文件判断其他工具；无法可靠判断才询问。项目指令的语义变量若非环境变量，必须从配置解析实际路径，不能直接作为 shell 环境变量。命令完整输出只临时用于判断；生命周期文档、评审报告、看板状态和用户回复中的命令输出，成功只保留命令、退出码和摘要，失败另保留能定位问题的失败段，禁止粘贴完整日志。
 
 ### 测试策略
 
 - **生产设计优先。** 需求、领域模型、公共接口、控制流、事务、异常和运行行为只服务生产场景。测试从已确认设计派生；禁止因测试、mock 或可达性新增 hook、setter、公开入口、配置开关、依赖抽象，暴露内部状态或改变生产语义。
-- **自动化测试默认可选。** 仅当用户、需求、项目指令或既有质量门禁要求时为必需；否则仅在不改变生产设计且成本合理时，为核心不变量、权限、金额/状态流转、幂等、并发、事务、数据完整性、失败恢复补最小行为测试。无论是否添加，均须以编译、静态检查、既有集成入口、专项命令等风险相称方式验证。
+- **默认不新增自动化测试。** 首次在任何用户回复、方案、spec 或计划中提及新增/补充测试前，必须先判定：①用户、需求、项目指令或既有质量门禁明确要求；②生产改动引起业务流程变化。业务流程变化仅指入口条件、业务分支、状态迁移、事务边界/回滚/补偿、权限门控或外部副作用顺序变化。两项均否必须结论“不新增测试”。金额、库存、税费计算，DTO/实体字段、映射/序列化、日志、纯展示/样式、配置/构建、依赖升级及保持行为不变的重构，未改变上述流程时不得新增测试；既有预期过期只调整或删除既有测试。“高风险/防回归/提高信心/成本合理”均非触发条件。运行既有 E2E、单元测试或完整质量门禁只属验证，不构成新增测试，也不授权修改/新增用例；专项验证不等于新增测试。
 - **禁止 TDD/RED → GREEN。** 不得先写测试并故意观察失败，不得回退、删除、禁用或破坏正确实现制造红灯，也不得把证明测试能失败作为交付步骤。先完成生产设计和实现，再写所需测试并直接验证；自然失败正常定位。此规则覆盖 `superpowers:test-driven-development` 及 `superpowers:verification-before-completion` 的回归测试 RED → GREEN 要求。
-- 以行为场景/失败模式为单位使用最小测试集；禁止按 DTO/实体字段、getter/setter 或生产方法机械铺测，禁止只为覆盖率增加低价值测试。关键字段由所属高风险场景验证。
+- 任一触发条件成立时，必须先核对既有测试覆盖，充分则复用/更新，不足则新增最小行为测试；均未触发不得创建。禁止按 DTO/实体字段、getter/setter 或生产方法机械铺测，禁止只为覆盖率增加低价值测试。
 - 覆盖率是风险信号和项目门禁，不是拆分依据。失败时先找未覆盖高风险规则；若只能靠低价值测试或生产设计让步达标，暂停并报告，禁止降阈值或机械补测。测试、覆盖率、可测试性绝不授权生产变更；只能调整测试方式/工具/门禁或由用户明确接受未满足状态，不能借重新设计改变业务语义。
 
 ### Stage 1：方案设计
 
-原生调用 `superpowers:brainstorming`，传入原始请求、已确认需求、现有需求文档、可选基准设计文档、worktree、目标分支和 base。只作以下覆盖：逐章节用户确认改为 AI 自审“不过度设计、生产设计优先”；测试场景不能反向增加生产能力/接口/抽象；书面 spec 用户审阅改为 AI 自动审阅后推进。除此之外不得复述、推断、固定或改写运行时技能的流程、确认点、产物或阶段关系。
+原生调用 `superpowers:brainstorming`，传入原始请求、已确认需求、现有需求文档、可选基准设计文档、worktree、目标分支和 base。只作以下覆盖：可从用户输入、仓库、项目文档或既有约定可靠推断的内容由 AI 查证、推理并记录假设，不得询问；只有无法可靠推断且会实质改变需求、授权边界、契约或方案的决策才问一次，同一决策在输入或约束未实质变化时不得重复确认；逐章节用户确认改为 AI 自审“不过度设计、生产设计优先”；测试场景不能反向增加生产能力/接口/抽象；书面 spec 用户审阅改为 AI 自动审阅后推进。除此之外不得复述、固定或改写运行时技能的流程、产物或阶段关系。
 
 spec 必须单列**变更面契约**：交付目标和用户指定模块、预计新增内容、预计修改/删除的既有生产模块/层次、受保护行为/契约、资源或容量影响及未验证项、低侵入方案及其保真度损失。无需先穷举文件，但须逐项具体到模块、层次、业务协作点和影响类别；“相关逻辑”“必要调整”“全部相关模块”“最佳实践”无效。
 
@@ -136,13 +150,13 @@ spec 产出并提交后，立即把其 worktree 绝对路径回填到生命周�
 
 ### Stage 3：制定实现计划
 
-原生调用 `superpowers:writing-plans`，覆盖固定 header、task field 和逐步代码模板：使用 AI-to-AI 弱结构自然语言，无固定字段名/顺序。拆分前仍须说明执行方式、预算及与之匹配的任务边界；还须说明高风险规则及失败场景、受影响范围验证、完整质量门禁命令、是否需要自动化测试及依据，无则明确写无。不得以字段/方法清单代替。
+原生调用 `superpowers:writing-plans`，覆盖固定 header、task field 和逐步代码模板：使用 AI-to-AI 弱结构自然语言，无固定字段名/顺序。拆分前仍须说明执行方式、预算及与之匹配的任务边界；还须说明高风险规则及失败场景、受影响范围验证和完整质量门禁命令。测试决定默认写“无需新增自动化测试”；任一测试触发条件成立时必须规划必需测试，写明硬性要求来源或改变的具体业务流程，并核对既有测试是否充分覆盖。不得以字段/方法清单代替。
 
 新增内容与既有生产行为修改分开写。后者列精确修改/删除路径；尚不能确定时至少写模块、层次、业务协作点并在编码前补路径，同时说明原行为、新行为、原因和受保护行为。发现未授权硬门禁项立即回 Stage 1 更新 spec 并获批，不能用详细计划代替授权。
 
-每个新增生产/测试代码文件以精确路径为锚点，简述单一职责、依赖、语义输入输出、关键控制流/协作/分支/状态变化/错误处理、要证明的高风险行为和验证命令。覆盖 writing-plans 的完整代码默认：伪代码须明确意图和边界但不可编译运行；禁止完整 import、注解、类/构造器、精确方法体、框架样板或完整测试代码。测试文件只写 setup/action/assertion 场景；不按代码行拆步，不在计划与实施重复同份代码。禁止 TBD、TODO、“稍后实现”及空泛控制流；非代码配置、协议、迁移和数据文件仍按风险提供精确信息。
+每个新增生产代码文件以精确路径为锚点，简述单一职责、依赖、语义输入输出、关键控制流/协作/分支/状态变化/错误处理和验证命令。测试策略触发时，计划须列出覆盖该触发项的既有测试文件与测试用例；覆盖不足时，再以精确路径规划最小新增测试，只写对应业务流程或硬性要求的 setup/action/assertion 场景。覆盖 writing-plans 的完整代码默认：伪代码须明确意图和边界但不可编译运行；禁止完整 import、注解、类/构造器、精确方法体、框架样板或完整测试代码。不按代码行拆步，不在计划与实施重复同份代码。禁止 TBD、TODO、“稍后实现”及空泛控制流；非代码配置、协议、迁移和数据文件仍按风险提供精确信息。
 
-覆盖默认 TDD：计划禁止 RED → GREEN、测试先行/观察失败/故意失败/回退正确实现，也不默认新增测试；验证必须入计划，必需测试仅来自用户、需求、项目指令或既有门禁，且排在生产实现后。禁止为测试改变生产设计。若项目指令要求测试先行，暂停并报告生命周期冲突。计划留在 `docs/superpowers/plans/`，不得按默认行为提交。
+覆盖默认 TDD：计划禁止 RED → GREEN、测试先行/观察失败/故意失败/回退正确实现；验证必须入计划。新增测试仅来自测试策略的两个触发条件，且排在生产实现后；“专项验证”不得写成新增测试任务。禁止为测试改变生产设计。若项目指令要求测试先行，暂停并报告生命周期冲突。计划留在 `docs/superpowers/plans/`，不得按默认行为提交。
 
 用户在设计批准后明确跳过计划时，标记 Stage 跳过；编码前在当前任务记录执行方式、预算、验证、测试决定及依据、既有生产行为修改清单。默认 Inline Direct，不创建计划/逐任务产物，也不跳过硬门禁。
 
@@ -152,75 +166,51 @@ spec 产出并提交后，立即把其 worktree 绝对路径回填到生命周�
 
 按计划或当前任务的 `Execution Mode` 编码；缺失则 Inline Direct，按共享语义和依赖组织最多 3 批。编码前以计划中的既有生产文件和允许新增模块为批准基线；每批开始前列预计增/改/删路径及语义影响并对照，结束后用 `git status --short`、`git diff --name-status <base-branch>` 核对实际类型和影响。基线外生产修改、未批准删除或越过受保护行为时，在修改前停下，更新 spec/计划并重新授权，禁止先改后补。
 
-使用 `superpowers:executing-plans` 时遵循已批准顺序，但禁止调用 `superpowers:test-driven-development`、测试先行、预期失败或回退正确实现造失败；计划仍含此类步骤时先按 Stage 3 修正。生产实现后再运行计划测试、受影响验证和 Stage 5 完整门禁。文件多、范围大或 skill 推荐均不能自动启用子代理驱动；仅当任务可独立实现验收、计划/当前任务已选择且用户明确授权时可用。
+使用 `superpowers:executing-plans` 时遵循已批准顺序，但禁止调用 `superpowers:test-driven-development`、测试先行、预期失败或回退正确实现造失败；计划仍含此类步骤时先按 Stage 3 修正。生产实现后先执行测试双向门禁：两个条件均未触发时不得新增测试；任一条件触发时，逐项核对硬性要求或改变的业务流程、对应测试文件、测试用例和运行结果，既有覆盖不足就新增或更新最小行为测试并直接运行。开发与评审期间，测试只运行与当前批次、修复或复核范围直接相关的专项测试；可运行受影响编译和静态检查，不运行完整质量门禁。文件多、范围大或 skill 推荐均不能自动启用子代理驱动；仅当任务可独立实现验收、计划/当前任务已选择且用户明确授权时可用。
 
 编码完成后评审 `git diff <base-branch>...HEAD`。每轮主代理先按指定角度独立检查完整范围并记录候选；首轮同时异步启一个隔离、只读 reviewer，以常规强度仅扫描候选，输入只含需求、设计、计划/当前任务、适用项目/领域文档和完整 diff。不得为增加发现而提高强度、增加 reviewer 或延长扫描。主代理读取报告前须完成自审。reviewer 可做非破坏诊断，但不是设计者/裁决者/修复者，不能改代码/过程文档或派生代理。无独立代理则记录后继续，不算缺少评审；首轮报告汇合双方候选，后续只含主代理自审。报告为 `docs/review/YYYY-MM-DD-<feature-slug>-review-round-<N>.md`。
 
-只报告当前 feature 中违反需求、项目规范、关键契约，或在允许输入/状态下现实可达的正确性、安全、权限、事务、并发、数据完整性、失败恢复缺陷。每项须有可定位代码证据和现实失败路径或可证逻辑错误；证据不足不报。禁止把替代架构、通用重构、风格/抽象纯度、未来扩展、无需求支撑的规模/性能、领域外输入、纯理论竞态或非关键测试覆盖列为候选。允许 `No findings.`，无证据不深挖。报告用 Markdown 自足条目包含定位、问题、失败场景、证据；禁止 JSON、表格、固定字段、`[PLAUSIBLE]`，无候选只写 `No findings.`。
+只报告当前 feature 中违反需求、项目规范、关键契约，或在允许输入/状态下现实可达的正确性、安全、权限、事务、并发、数据完整性、失败恢复缺陷。每项须有可定位代码证据和现实失败路径或可证逻辑错误；证据不足不报。禁止把替代架构、通用重构、风格/抽象纯度、未来扩展、无需求支撑的规模/性能、领域外输入、纯理论竞态或非关键测试覆盖列为候选；但测试策略已触发却缺少对应必需测试属于确认缺陷。允许 `No findings.`，无证据不深挖。报告用 Markdown 自足条目包含定位、问题、失败场景、证据；禁止 JSON、表格、固定字段、`[PLAUSIBLE]`，无候选只写 `No findings.`。
 
 主代理原生调用 `superpowers:receiving-code-review` 并传报告路径，将 reviewer 内容仅作补充候选；合并自审后逐项验证真伪、需求相关、可达性和证据，去重定级，丢弃越界建议。确认清单是唯一修复范围。缺陷不授权扩面；若须进入未批准模块或改变领域、协议、事务、异常、补偿、权限、公共接口，保留证据并回 Stage 1。问题连续要求深入业务层时，优先判定架构/需求保真不可接受并暂停。
 
-按严重程度从高到低、一次一个地修复确认问题；每次依项目指令跑受影响编译/专项验证，通过再继续。先修生产代码，再按测试策略按需添加最小行为测试并直接运行，禁止为可测性改设计或撤销正确修复看失败；否则用最小编译、静态检查、集成入口或专项验证证明。范围不得越过本 feature/授权面。单 bug 连续 2 次修复仍不过，调用 `pua:pua` 做 RCA；PUA 下再 2 次仍失败，记为未解决并写入报告，禁止静默忽略。
+按严重程度从高到低、一次一个地修复确认问题；每次依项目指令运行受影响编译或已有专项验证，通过再继续。先修生产代码；任一测试触发条件成立时，必须在生产实现后补足并直接运行对应的最小行为测试。否则用最小编译、静态检查、既有测试/集成入口或已有专项命令证明；专项验证不等于新增测试，也不授权创建测试文件或测试用例。禁止为可测性改设计或撤销正确修复看失败，范围不得越过本 feature/授权面。单个确认缺陷连续 2 次修复仍未通过验证时，停止继续盲改并完整读取、执行 [Stage 4 failure escalation reference](references/stage-4-failure-escalation.md)；该协议不得增加流程型 skill、实现批次、评审轮次或授权范围。
 
-**退出门禁：** reviewer 只参与首轮，其 `No findings.` 永不计干净轮；只有主代理完整自审计数。计数初始 0，任何确认缺陷修复后归零。计数 0 用“需求与契约正确性”角度，核对需求、规范、允许输入、状态、输出、关键契约；干净变 1。计数 1 必须换“集成与回归失败路径”，检查调用方、依赖、错误处理、重试、回滚和相邻行为；安全/并发/事务/性能仅在 feature 涉及或需求要求时检查，禁止重复上轮清单冒充新角度。每轮检查完整范围、沿用证据门槛并写新报告；无缺陷只写 `No findings.`。第二角度干净后计数 2 退出。最多 5 轮；仍不收敛则保留报告和具体未解决项，暂停让用户决定。理论疑虑不得制造问题、重置或延长循环。
+**退出门禁：** reviewer 只参与首轮，其 `No findings.` 不计主代理结论。主代理每轮按完整范围同时检查需求与契约正确性、集成与回归失败路径；确认缺陷修复并通过专项验证后重新全量主审，最多 5 轮，直到一轮完整范围只写 `No findings.`。随后做一次定向复核，只检查高风险/受影响路径及本轮修复项，不重复全量清单；发现问题时修复并只做一次同范围定向确认，仍有问题即暂停，不回到全量评审。理论疑虑不得制造问题或延长循环。
 
-### Stage 5：Squash 并 rebase
+上述一轮全量零问题和一次定向复核完成后，执行 Stage 3 确定的完整质量门禁。仅对可归因于本 feature 的问题允许最多两轮“定向修复 → 同范围复核与专项验证 → 重跑完整质量门禁”；不重启全量评审。两轮后仍失败、问题无法归因或修复需要越过授权面时暂停并保留证据。门禁通过后 Stage 4 完成，Stage 5 不再运行完整质量门禁。
 
-1. **最终门禁。** 用 `git status --short`、`git diff --name-status <base-branch>` 审计所有增改删和语义影响均在授权基线且不越受保护行为；漂移则回 Stage 1，不能以测试通过接受。按项目指令运行一次目标子项目完整质量门禁；失败只修本次变更并重跑，无法归因则暂停。覆盖率失败仍按测试策略仅补不改变设计的高风险测试；只能靠低价值测试/生产让步时报告冲突，不得为测试返回 Stage 1 申请生产变更。
-2. **交付与安全。** squash 前提交需交付的代码、设计、需求和用户指定文档；三个过程目录保持未提交，本机临时文件/worktree 目录不得提交。`git status --short` 中除此三目录外有任何未提交路径即暂停，禁止删过程文档换干净。当前分支须为 `feat/YYYY-MM-DD-<feature-slug>`；`<base-branch>` 仍指原工作区 base，禁止 checkout/reset/提交 base。已推送且将改写远端历史时先警告并获明确确认。
-3. **Squash。** 运行 `git merge-base <base-branch> HEAD` 保存 `<merge-base>`，再执行：
+### Stage 5：固化、整合与清理
 
-   ```bash
-   git reset --soft <merge-base>
-   git reset <merge-base> -- docs/feature docs/review docs/superpowers/plans
-   git diff --cached --name-only
-   git commit -m "feat: [模块] 需求功能"
-   ```
+先按下表决定评审与验证；不得把后续身份变化自动解释为需要重新运行完整质量门禁。
 
-   第二条只取消暂存过程文档，必须保留工作树文件；确认 staged 列表无过程文档再提交。
-4. **在 feature 上 rebase。** 执行 `git rebase <base-branch>`；冲突只在 feature worktree 解决并继续，禁止修改 base 或原工作区。
-5. **决定是否复审。** 只以 `<initial-base-sha>` 运行：
+| 事件 | 评审 | 验证与处理 |
+|---|---|---|
+| squash/rebase 前的 feature 分支 | 不新增评审 | 确认 Stage 4 完整质量门禁已对当前交付内容通过；不在 Stage 5 重跑 |
+| rebase 无冲突 | 不重新评审 | 不重跑完整门禁；只验证祖先关系、单提交和过程文档边界 |
+| rebase 发生过冲突 | 对最终实际 diff 追加一次完整主代理评审 | 验证冲突实际影响范围；不重启 Stage 4 的全量零问题与定向复核门禁，不重跑完整质量门禁 |
+| base 合入后 HEAD 与 tree ID 均等于保存值 | 不重新评审 | 仅表示 base 移到已验证代码树；不重跑任何门禁 |
+| base HEAD 或 tree ID 任一不一致 | 暂停并评审实际差异 | 保留 feature 分支和 worktree，验证实际差异；tree 相同但 HEAD 不同时改为审计提交拓扑和原因，禁止完成上报或清理 |
 
-   ```bash
-   git merge-base --is-ancestor <initial-base-sha> HEAD
-   git rev-list --count <initial-base-sha>..HEAD
-   ```
+进入本阶段必须完整读取并执行 [Stage 5 integration reference](references/stage-5-integration.md)。该文件只提供本矩阵下的 Git 操作、检查、用户确认、上报和清理细节，不能改变本矩阵、Stage 4 证据门槛或流程型 skill 调用守卫。
 
-   首条退出 0 且次条为 `1`：Stage 4 仍有效；squash/rebase、SHA、消息、提交数变化不触发复审。此处覆盖 `superpowers:requesting-code-review` 的 before merge 默认及 `superpowers:finishing-a-development-branch` 触发的复审。否则针对最终 `git diff <base-branch>...HEAD` 重做 Stage 4；干净后记录最终 HEAD。HEAD/交付不变不得再评，任何修复、rebase 或交付变化使记录失效并须重判。
-6. **验证最终状态。** 运行：
-
-   ```bash
-   git merge-base --is-ancestor <base-branch> HEAD
-   git rev-list --count <base-branch>..HEAD
-   git diff --name-only <base-branch>...HEAD -- docs/feature docs/review docs/superpowers/plans
-   ```
-
-   成功须依次为退出 0、输出 `1`、无输出，即 feature 只多一个 commit、base 引用未改、提交无过程文档。
-7. **询问整合与清理。** 先报告最终变更面：逐项列出既有生产文件的修改/删除及对控制流、状态、事务、异常、补偿、协议、权限的影响、共享资源/容量影响和未执行压测/运行验证；新增文件可按职责分组，测试通过不能替代影响说明。然后询问：“是否将 `<base-branch>` rebase 到 `<feature-branch>`，并在成功后删除开发分支和 worktree？这会同时删除 worktree 中未提交的生命周期、评审和计划过程文档。”这替代 `superpowers:finishing-a-development-branch`；禁止自动调用或展示其菜单。
-
-   用户拒绝/暂缓：输出 feature 分支、worktree、唯一 commit、验证结果和保留过程文档后结束，不清理。用户明确同意：保存 `<feature-head>` 和 tree ID；确认原工作区仍在 `<base-branch>` 且干净、feature worktree 除三目录外无未提交项、`git merge-base --is-ancestor <base-branch> <feature-branch>` 成功。任一失败即暂停，禁止 stash/丢弃/清理；base 已前移且非祖先则回步骤 4 rebase 最新 base，再做步骤 5–6。
-
-   前置通过后在原工作区 base 执行 `git rebase <feature-branch>`；base HEAD/tree ID 必须分别等于 `<feature-head>`/其 tree ID。相同仅为移动到已评审代码树，不复审或重跑完整门禁；不同则暂停并保留分支/worktree，先评审验证实际内容。
-
-   只有验证相同后，先把 `specDocumentPath` 从 worktree 路径改写为 `<repo-root>` 下相同仓库相对路径，并确认目标是已整合的 Stage 1 Markdown spec；再按 Feature Kanban 协议上报 `completed` / `integrated` 完整快照。然后解析确认 `<worktree-path>` 是已注册 feature worktree，且不是 `<repo-root>` 或宽泛目录，再从原工作区运行 `git worktree remove --force <worktree-path>`、`git branch -d <feature-branch>`、`git worktree prune`。`--force` 只删除用户在本步明确同意放弃的过程文档；有其他未提交内容时禁用。
-
-   确认 `git branch -d <feature-branch>` 成功且开发分支已不存在后，调用 `PATCH /api/cards/{cardId}/archive` 并发送 `{ "archived": true }`。归档失败不影响已确认的 `completed` 状态：直接向用户报告简短错误，不重建已删除的生命周期文档，不循环重试，也不恢复分支或 worktree。最终输出 base、commit、删除的分支/worktree、归档结果，并说明过程文档随 worktree 删除且无法从 Git 恢复。
+主路径固定为：审计 Stage 4 门禁结果与授权边界 → squash 为单提交 → 使用 reference 中同一个 rebase 子流程对齐最新本地 base → 披露最终变更面并取得整合与清理确认 → 再次使用该 rebase 子流程 → 以 `git merge --ff-only <feature-branch>` 整合原工作区 base → 核对 HEAD 与 tree ID → 仅在完全一致后上报完成并触发自动归档、再清理。任一暂停条件都必须保留分支、worktree 和过程文档。
 
 ## Feature Kanban 上报协议
 
-看板只保存当前生命周期快照和 AI 会话历史；详细 JSON、合法 step、重试身份和错误语义以 [Feature Kanban API reference](references/feature-kanban-api.md) 为准。
+看板只保存当前生命周期快照和 AI 会话历史；详细 JSON、合法 step、调用身份和接口约束以 [Feature Kanban API reference](references/feature-kanban-api.md) 为准。
 
-- Phase 2 初始化成功后，后续只使用 `PATCH /api/cards/{cardId}`，并发送全部可变字段；不得发送部分更新。
-- 在阶段进入或完成、Stage 4 有意义的编码/验证/评审/修复变化、等待用户、阻塞、恢复和最终整合结果时上报；不得按命令产生噪声事件。
+- Phase 2 调用一次 `POST /api/cards` 后，无论调用结果如何，后续每次阶段或状态变化都调用 `PATCH /api/cards/{cardId}` 并发送全部可变字段；不得发送部分更新，也不得因先前调用失败而停报。
+- 每次阶段或状态变化必须发送一个完整 PATCH 快照，包括阶段进入与完成、Stage 4 编码/验证/评审/修复切换、implementation batch 或 review round 变化、等待用户、阻塞、恢复、阶段回退和最终整合结果。质量门禁通过、测试通过、生命周期文档或 checkbox 更新都不能替代看板上报；不得按单条命令产生无状态变化的噪声事件。
 - 生命周期映射固定为：初始化 `initializing`，Stage 1 `designing`，Stage 2 `requirements_review`，Stage 3 `implementation_planning`，Stage 4 `implementing_and_reviewing`，Stage 5 整理分支期间 `finalizing_branch`，等待整合确认时 `awaiting_integration`，base 实际整合成功后 `completed`。
-- Stage 4 按当前实际状态使用 `coding`、`validating`、`reviewing` 或 `fixing`，并在已知时携带 implementation batch、review round 和 consecutive clean review 计数。每个 Stage 4 完整快照都必须发送 `implementationSummary`：用不超过 10 个 Unicode 字符简述当前批次实际内容（如“服务端存储”“前端交互”），禁止只写“批次1”、`batch 2` 等序号标签。
+- Stage 4 按当前实际状态使用 `coding`、`validating`、`reviewing` 或 `fixing`，并在已知时携带 implementation batch 和 review round；consecutive clean review 仅表示是否已取得一轮全量零问题（0/1），定向复核不累加。每个 Stage 4 完整快照都必须发送 `implementationSummary`：用不超过 10 个 Unicode 字符简述当前批次实际内容（如“服务端存储”“前端交互”），禁止只写“批次1”、`batch 2` 等序号标签。
 - 每次只发送当前 AI session；恢复同一流程沿用文档中的 `cardId`，新 AI 会话生成新的 `sessionRecordId`。真实会话 ID 后来可用时沿用同一 session record 补充，禁止虚构 ID 或链接。
-- 用户归档不改变生命周期；下一次成功 PATCH 自动取消归档。合法阶段回退直接上报回退后的完整快照。
-- 每次 API 失败都更新生命周期文档的“看板同步”并继续本地流程；下次成功后清除失败。禁止循环重试，禁止由 Skill 启动、停止、安装或修复服务。
+- 成功持久化的 `completed` / `integrated` 完整 PATCH 快照会在服务端同一事务内自动归档卡片；成功的非 `completed` 完整 PATCH 会恢复为进行中。合法阶段回退直接上报回退后的完整快照。
+- 本 Skill 要求调用的全部 Feature Kanban API（一次 `POST /api/cards` 与后续所有 `PATCH /api/cards/{cardId}`）都使用精确 500ms 超时并丢弃返回值，不解析服务端响应。调用失败不记录、不重试、不阻塞本地流程；直接继续当前阶段，且不得由 Skill 启动、停止、安装或修复服务。
 
 ## 异常处理
 
 - 编译/验证失败：按项目指令定位并只修本次变更；无法归因则暂停并报告证据。
 - 必需 skill 失败：确认名称和原生加载机制；仍不可用则暂停，禁止跳过阶段。
 - worktree 失败：报告实际命令、路径和错误；禁止退回原工作区或自动删除 worktree、分支、用户文件。
-- 评审到 5 轮仍不收敛：保留末轮报告和全部具体未解决缺陷，暂停让用户决定继续或接受风险；理论疑虑不能增加预算。
+- 全量评审到 5 轮、定向确认一次或质量门禁修复两轮后仍不收敛：保留末轮报告、失败摘要和具体未解决缺陷，暂停让用户决定；理论疑虑不能增加预算。

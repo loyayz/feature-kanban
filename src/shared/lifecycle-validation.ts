@@ -269,14 +269,6 @@ export function validateUpdateCard(value: unknown): ValidationResult<UpdateCardI
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value: snapshot };
 }
 
-export function validateArchiveBody(value: unknown): ValidationResult<{ archived: boolean }> {
-  if (!isRecord(value)) return { ok: false, errors: ["body must be an object"] };
-  const errors: string[] = [];
-  rejectUnknownKeys(value, ["archived"], "body", errors);
-  const archived = requiredBoolean(value, "archived", errors);
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { archived } };
-}
-
 export function validateProjectVisibilityBody(
   value: unknown,
 ): ValidationResult<ProjectVisibilityInput> {

@@ -12,17 +12,21 @@ h2 { margin: 8px 0 0; color: var(--text); font: 650 22px/1.25 var(--font-display
 .facts > div { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .facts span { grid-column: 1 / -1; color: var(--text-muted); font: 650 12px/1 var(--font-utility); letter-spacing: .05em; text-transform: uppercase; }
 .facts code, .facts p { overflow-wrap: anywhere; margin: 0; color: var(--text-soft); font: 500 12px/1.5 var(--font-mono); }
-.facts button, .session__actions button, .preview__toolbar button { align-self: start; min-height: 32px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: transparent; color: var(--text-soft); font: 620 12px/1 var(--font-body); cursor: pointer; }
+.facts button, .session__actions button { align-self: start; min-height: 32px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: transparent; color: var(--text-soft); font: 620 12px/1 var(--font-body); cursor: pointer; }
 .facts button:disabled { cursor: wait; opacity: .55; }
 .fact-actions { display: flex; grid-column: 2; gap: 6px; }
 .resource-error { margin: 12px 0 0; color: var(--danger); font: 560 12px/1.45 var(--font-body); }
-.preview { min-width: 0; }
-.preview__toolbar { position: sticky; z-index: 1; top: -20px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: -20px -24px 20px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
-.preview__toolbar code { overflow: hidden; color: var(--text-faint); font: 500 11px/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .sessions { margin-top: 26px; }
 .section-title { display: flex; align-items: center; gap: 9px; }
 h3 { margin: 0; color: var(--text); font: 650 14px/1 var(--font-body); }
 .section-title > span { display: grid; min-width: 22px; height: 22px; place-items: center; border-radius: 5px; background: var(--surface-sunken); color: var(--text-muted); font: 650 12px/1 var(--font-utility); }
+.codex-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--signal) 30%, var(--line)); border-radius: 8px; background: var(--signal-soft); }
+.codex-entry div { display: grid; gap: 5px; }
+.codex-entry strong { color: var(--text); font: 680 12px/1 var(--font-body); }
+.codex-entry span { color: var(--text-muted); font: 500 11px/1.35 var(--font-body); }
+.codex-entry button { flex: 0 0 auto; min-height: 34px; padding: 7px 11px; border: 1px solid var(--signal); border-radius: 7px; background: var(--signal); color: var(--nav); font: 650 12px/1 var(--font-body); cursor: pointer; }
+.codex-entry--unavailable { border-color: var(--line); background: var(--surface-sunken); }
+.codex-entry--unavailable button { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text-faint); cursor: not-allowed; opacity: .68; }
 ol { display: grid; margin: 18px 0 0; padding: 0; list-style: none; }
 li { display: grid; grid-template-columns: 14px 1fr; gap: 9px; min-width: 0; }
 .session__marker { position: relative; }
@@ -41,7 +45,6 @@ li:last-child .session__marker::after { display: none; }
 .navigation-error { color: var(--danger); font: 520 12px/1.4 var(--font-body); }
 footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-top: 1px solid var(--line); background: var(--surface-sunken); }
 footer span { color: var(--text-faint); font: 500 12px/1.4 var(--font-body); }
-.archive-button { min-height: 36px; padding: 9px 13px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface-raised); color: var(--text-soft); font: 650 12px/1 var(--font-body); cursor: pointer; }
 @keyframes enter { from { transform: translateX(24px); opacity: 0; } }
 @keyframes fade-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .drawer, .backdrop { animation: none; } }

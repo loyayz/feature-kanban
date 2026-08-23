@@ -304,7 +304,7 @@ function New-FeatureKanbanShortcut {
         $shortcut.Description = 'Codex with Feature Kanban'
     } else {
         $shortcut.TargetPath = 'powershell.exe'
-        $node = Join-Path $Root 'runtime\node.exe'
+        $node = Get-FeatureNodeExecutable
         $standalone = Join-Path $Root 'app\server\server\standalone.js'
         $escapedRoot = $Root.Replace("'", "''")
         $escapedNode = $node.Replace("'", "''")
@@ -314,6 +314,27 @@ function New-FeatureKanbanShortcut {
     }
     $shortcut.WorkingDirectory = $Root
     $shortcut.Save()
+}
+
+function Get-FeatureNodeExecutable {
+    $configured = if ($env:FEATURE_KANBAN_NODE_PATH) { $env:FEATURE_KANBAN_NODE_PATH.Trim() } else { '' }
+    $node = if ($configured) {
+        if (-not [IO.Path]::IsPathRooted($configured) -or -not (Test-Path -LiteralPath $configured -PathType Leaf)) {
+            throw 'FEATURE_KANBAN_NODE_PATH must point to an existing absolute file.'
+        }
+        [IO.Path]::GetFullPath($configured)
+    } else {
+        $command = Get-Command node.exe -ErrorAction SilentlyContinue
+        if (-not $command) {
+            throw 'Feature Kanban requires local Node.js 24 or newer. Install Node.js or set FEATURE_KANBAN_NODE_PATH.'
+        }
+        $command.Source
+    }
+    $version = (& $node --version 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^v(\d+)\.(\d+)\.(\d+)' -or [int] $Matches[1] -lt 24) {
+        throw "Feature Kanban requires local Node.js 24 or newer; found $version"
+    }
+    return $node
 }
 
 function Show-FeatureSkillFailures {
@@ -331,6 +352,7 @@ function Show-FeatureSkillFailures {
 
 function Invoke-FeatureKanbanInstall {
     if (-not $env:LOCALAPPDATA -or -not $env:USERPROFILE) { throw 'LOCALAPPDATA and USERPROFILE are required.' }
+    $null = Get-FeatureNodeExecutable
     $registeredInstallRoot = Get-FeatureRegisteredInstallRoot
     $suggestedInstallRoot = if ($registeredInstallRoot) {
         $registeredInstallRoot
@@ -356,13 +378,15 @@ function Invoke-FeatureKanbanInstall {
     $desktop = Get-FeatureDesktopPath
     $programs = Get-FeatureProgramsPath
     New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
-    foreach ($folder in @('app', 'runtime', 'installer')) {
+    foreach ($folder in @('app', 'installer')) {
         $source = Join-Path $PackageRoot $folder
         if (-not (Test-Path -LiteralPath $source)) { throw "Package folder missing: $source" }
         $target = Join-Path $InstallRoot $folder
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
         Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
     }
+    $legacyRuntime = Join-Path $InstallRoot 'runtime'
+    if (Test-Path -LiteralPath $legacyRuntime) { Remove-Item -LiteralPath $legacyRuntime -Recurse -Force }
 
     $dataRoot = Join-Path $env:USERPROFILE '.feature-kanban'
     $backupRoot = Join-Path $dataRoot 'skill-backups'

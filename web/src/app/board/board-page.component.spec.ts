@@ -13,7 +13,6 @@ describe("BoardPageComponent", () => {
     listCards: ReturnType<typeof vi.fn>;
     listProjects: ReturnType<typeof vi.fn>;
     getCard: ReturnType<typeof vi.fn>;
-    setArchived: ReturnType<typeof vi.fn>;
     setProjectHidden?: ReturnType<typeof vi.fn>;
   }) {
     await TestBed.configureTestingModule({
@@ -32,20 +31,20 @@ describe("BoardPageComponent", () => {
     return fixture;
   }
 
-  it("renders the six-stage projection and exposes details/archive without stage editing or dragging", async () => {
+  it("renders the seven-stage projection and exposes read-only details without stage editing or dragging", async () => {
     const card = makeCard("card-alpha", "designing");
     const api = {
       listCards: vi.fn(() => of([card])),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(card)),
-      setArchived: vi.fn(() => of({ ...card, archived: true })),
     };
     const fixture = await render(api);
 
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(6);
+    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(7);
+    expect(root.querySelector("fk-lifecycle-column")?.getAttribute("data-stage")).toBe("initializing");
     expect(root.textContent).toContain("All");
-    expect(root.textContent).not.toContain("流程初始化");
+    expect(root.textContent).toContain("初始化");
     expect(root.textContent).not.toContain("已完成");
     expect(root.textContent).toContain("1 个可见流程");
     expect(root.querySelectorAll("select")).toHaveLength(0);
@@ -56,31 +55,78 @@ describe("BoardPageComponent", () => {
     fixture.detectChanges();
     expect(root.querySelector("fk-card-detail")).not.toBeNull();
     expect(root.textContent).toContain("AI 会话");
-    expect(root.textContent).toContain("打开会话");
-    root.querySelector<HTMLButtonElement>(".archive-button")!.click();
-    expect(api.setArchived).toHaveBeenCalledWith("card-alpha", true);
+    expect(root.textContent).toContain("打开 Codex 对话");
+    expect(root.textContent).toContain("任务完成后将自动归档");
+    expect(root.querySelector(".archive-button")).toBeNull();
   });
 
-  it("keeps hidden stages out of cards, the visible count, and loaded project badges", async () => {
+  it("requires a concrete project before opening the create-task dialog", async () => {
+    const card = makeCard("task-card", "designing");
+    const api = {
+      listCards: vi.fn(() => of([card])),
+      listProjects: vi.fn(() => of(projects)),
+      getCard: vi.fn(() => of(card)),
+      createCodexTask: vi.fn(),
+    };
+    const fixture = await render(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const create = root.querySelector<HTMLButtonElement>(".create-task")!;
+    expect(create.disabled).toBe(true);
+    expect(create.title).toBe("请先选择一个具体项目");
+
+    [...root.querySelectorAll<HTMLButtonElement>(".project-select")]
+      .find((button) => button.textContent?.includes("alpha"))!.click();
+    fixture.detectChanges();
+    expect(create.disabled).toBe(false);
+    create.click();
+    fixture.detectChanges();
+    expect(root.querySelector("fk-create-task-dialog")).not.toBeNull();
+    expect(root.textContent).toContain("这段文字会成为新对话的第一条提示词");
+  });
+
+  it("shows initialization, excludes completed, and keeps aggregate badges separate from visible count", async () => {
     const visible = makeCard("card-visible", "requirements_review", { title: "Visible flow" });
     const api = {
       listCards: vi.fn(() => of([
-        makeCard("card-initializing", "initializing"),
+        makeCard("card-initializing", "initializing", { title: "Initializing flow" }),
         visible,
         makeCard("card-completed", "completed"),
       ])),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(visible)),
-      setArchived: vi.fn(() => of({ ...visible, archived: true })),
     };
     const fixture = await render(api);
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.querySelectorAll(".card__open")).toHaveLength(1);
-    expect(root.querySelector(".card__open")?.textContent).toContain("Visible flow");
-    expect(root.querySelector(".statusline span")?.textContent).toContain("1 个可见流程");
+    expect(root.querySelectorAll(".card__open")).toHaveLength(2);
+    expect(root.textContent).toContain("Initializing flow");
+    expect(root.textContent).toContain("Visible flow");
+    expect(root.querySelector(".statusline span")?.textContent).toContain("2 个可见流程");
     const projectCounts = [...root.querySelectorAll(".project-nav button em")].map((count) => count.textContent);
-    expect(projectCounts.slice(0, 2)).toEqual(["1", "1"]);
+    expect(projectCounts).toEqual(["3", "2", "1"]);
+  });
+
+  it("keeps an initializing project's aggregate badge stable when selected", async () => {
+    const initializing = makeCard("card-initializing", "initializing", { projectName: "feature-kanban" });
+    const projectList = [{ name: "feature-kanban", activeCount: 1, archivedCount: 0, hidden: false }];
+    const api = {
+      listCards: vi.fn(() => of([initializing])),
+      listProjects: vi.fn(() => of(projectList)),
+      getCard: vi.fn(() => of(initializing)),
+    };
+    const fixture = await render(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const projectButton = [...root.querySelectorAll<HTMLButtonElement>(".project-select")]
+      .find((button) => button.textContent?.includes("feature-kanban"))!;
+
+    expect(projectButton.querySelector("em")?.textContent).toBe("1");
+    expect(root.textContent).toContain("1 个可见流程");
+    projectButton.click();
+    fixture.detectChanges();
+
+    expect(api.listCards).toHaveBeenLastCalledWith({ archived: false, project: "feature-kanban" });
+    expect(projectButton.querySelector("em")?.textContent).toBe("1");
+    expect(root.textContent).toContain("1 个可见流程");
   });
 
   it("hides persisted projects and cards until the eye override reveals them", async () => {
@@ -95,7 +141,6 @@ describe("BoardPageComponent", () => {
       listCards: vi.fn(() => of([alpha, beta])),
       listProjects: vi.fn(() => of(hiddenProjects)),
       getCard: vi.fn(() => of(alpha)),
-      setArchived: vi.fn(() => of({ ...alpha, archived: true })),
       setProjectHidden,
     };
     const fixture = await render(api);
@@ -124,13 +169,12 @@ describe("BoardPageComponent", () => {
       )),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(completed)),
-      setArchived: vi.fn(() => of({ ...completed, archived: false })),
     };
     const fixture = await render(api);
     const root = fixture.nativeElement as HTMLElement;
     const viewButtons = [...root.querySelectorAll<HTMLButtonElement>(".view-switch button")];
 
-    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(6);
+    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(7);
     expect(root.textContent).toContain("Active flow");
     viewButtons.find((button) => button.textContent?.trim() === "已归档")!.click();
     fixture.detectChanges();
@@ -149,7 +193,7 @@ describe("BoardPageComponent", () => {
     viewButtons.find((button) => button.textContent?.trim() === "进行中")!.click();
     fixture.detectChanges();
     expect(api.listCards).toHaveBeenLastCalledWith({ archived: false });
-    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(6);
+    expect(root.querySelectorAll("fk-lifecycle-column")).toHaveLength(7);
     expect(root.textContent).toContain("Active flow");
     expect(root.textContent).not.toContain("Completed flow");
   });
@@ -165,7 +209,6 @@ describe("BoardPageComponent", () => {
       listCards: vi.fn((filters: { archived?: boolean }) => filters.archived ? archivedRequest : of([active])),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(archived)),
-      setArchived: vi.fn(() => of({ ...archived, archived: false })),
     };
     const fixture = await render(api);
     const root = fixture.nativeElement as HTMLElement;
@@ -192,7 +235,6 @@ describe("BoardPageComponent", () => {
       )),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(codexCard)),
-      setArchived: vi.fn(() => of({ ...codexCard, archived: true })),
     };
     const fixture = await render(api);
     const root = fixture.nativeElement as HTMLElement;
@@ -217,7 +259,6 @@ describe("BoardPageComponent", () => {
       listCards: vi.fn(() => of([card])),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn(() => of(card)),
-      setArchived: vi.fn(() => of({ ...card, archived: true })),
     };
     const fixture = await render(api);
     const root = fixture.nativeElement as HTMLElement;

@@ -8,12 +8,18 @@ import { JSDOM } from "jsdom";
 const BOARD_ORIGIN = "http://127.0.0.1:46171";
 const script = readFileSync(resolve(process.cwd(), "inject/feature-kanban.user.js"), "utf8");
 
-function harness() {
+function harness(shortTimers = false) {
   const dom = new JSDOM(
-    "<!doctype html><html><head><style>.bg-token-list-hover-background { background-color: rgb(255, 0, 0); }</style></head><body><aside><nav><div><button class='sidebar-item'>插件</button></div><div id='native-current' role='button' aria-current='page' data-app-action-sidebar-thread-selected='true' class='bg-token-list-hover-background'>current</div></nav></aside><main id='app-shell'><main data-app-shell-main-surface='default'></main></main><button data-app-action-sidebar-thread-id='thread-visible'>thread</button></body></html>",
+    "<!doctype html><html><head><style>.bg-token-list-hover-background { background-color: rgb(255, 0, 0); }</style></head><body><aside><nav><div><button class='sidebar-item'>插件</button></div><div id='native-current' role='button' aria-current='page' data-app-action-sidebar-thread-selected='true' class='bg-token-list-hover-background'>current</div></nav></aside><main id='app-shell'><main data-app-shell-main-surface='default'></main></main><button data-app-action-sidebar-thread-id='local:thread-visible' data-app-action-sidebar-thread-selected='true'>thread</button></body></html>",
     { runScripts: "outside-only", url: "https://codex.local/" },
   );
   const { window } = dom;
+  if (shortTimers) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => (
+      nativeSetTimeout(handler, Math.min(timeout ?? 0, 10), ...args)
+    )) as typeof window.setTimeout;
+  }
   const outerMain = window.document.querySelector<HTMLElement>("#app-shell")!;
   outerMain.getBoundingClientRect = () => ({
     left: 0, top: 0, width: 1200, height: 700, right: 1200, bottom: 700,
@@ -169,6 +175,8 @@ test("mounts below Plugins and observes native sidebar clicks without changing C
   const frame = panel.querySelector<HTMLIFrameElement>("iframe")!;
   assert.equal(panel.style.display, "block");
   assert.equal(entry.getAttribute("aria-pressed"), "true");
+  assert.equal(entry.getAttribute("aria-current"), "page");
+  assert.equal(entry.getAttribute("data-app-action-sidebar-thread-selected"), "true");
   assert.equal(entry.classList.contains("bg-token-list-hover-background"), true);
   assert.equal(window.getComputedStyle(nativeCurrent).backgroundColor, "rgba(0, 0, 0, 0)");
   assert.equal(nativeCurrent.getAttribute("aria-current"), "page");
@@ -191,6 +199,8 @@ test("mounts below Plugins and observes native sidebar clicks without changing C
   assert.equal(nativeClicks, 1);
   assert.equal(nativeDefaultPrevented, false);
   assert.equal(entry.getAttribute("aria-pressed"), "false");
+  assert.equal(entry.hasAttribute("aria-current"), false);
+  assert.equal(entry.hasAttribute("data-app-action-sidebar-thread-selected"), false);
   assert.equal(entry.classList.contains("bg-token-list-hover-background"), false);
   assert.equal(window.getComputedStyle(nativeCurrent).backgroundColor, "rgb(255, 0, 0)");
 
@@ -203,17 +213,41 @@ test("mounts below Plugins and observes native sidebar clicks without changing C
   dom.window.close();
 });
 
-test("clicks a mounted thread, falls back to the route bridge, and reports failure", async () => {
+test("keeps native focus through owned activation and unrelated renderer mutations", async () => {
   const { dom, window } = harness();
+  const input = window.document.createElement("input");
+  input.setAttribute("aria-label", "Codex prompt");
+  window.document.body.append(input);
+  input.focus();
+
+  (window as unknown as { __featureKanban: { activate(): void; dispose(): void } }).__featureKanban.activate();
+  assert.equal(window.document.activeElement, input);
+
+  window.document.querySelector("main")!.append(window.document.createElement("span"));
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
+  assert.equal(window.document.activeElement, input);
+
+  (window as unknown as { __featureKanban: { dispose(): void } }).__featureKanban.dispose();
+  dom.window.close();
+});
+
+test("opens only an exact selected sidebar thread and waits for delayed discovery", async () => {
+  const { dom, window } = harness(true);
   const frame = window.document.querySelector("iframe")!;
-  const responses: Array<{ type: string; ok?: boolean }> = [];
-  frame.contentWindow!.postMessage = (message: unknown) => { responses.push(message as { type: string; ok?: boolean }); };
+  const responses: Array<{ type: string; ok?: boolean; error?: string }> = [];
+  frame.contentWindow!.postMessage = (message: unknown) => {
+    responses.push(message as { type: string; ok?: boolean; error?: string });
+  };
   send(window, frame.contentWindow!, BOARD_ORIGIN, {
     type: "feature-kanban:hello", challenge: "challenge-two",
   });
   let clicked = false;
   const row = window.document.querySelector<HTMLElement>("[data-app-action-sidebar-thread-id]")!;
-  row.addEventListener("click", () => { clicked = true; });
+  row.dataset.appActionSidebarThreadSelected = "false";
+  row.addEventListener("click", () => {
+    clicked = true;
+    row.dataset.appActionSidebarThreadSelected = "true";
+  });
   send(window, frame.contentWindow!, BOARD_ORIGIN, {
     type: "feature-kanban:open-session",
     challenge: "challenge-two",
@@ -224,29 +258,36 @@ test("clicks a mounted thread, falls back to the route bridge, and reports failu
   assert.equal(responses.at(-1)?.ok, true);
 
   row.remove();
-  const routes: unknown[] = [];
-  Object.defineProperty(window, "electronBridge", {
-    configurable: true,
-    value: { sendMessageFromView: (message: unknown) => { routes.push(message); } },
+  const routes: Array<{ type: string; path: string }> = [];
+  window.addEventListener("message", (event: MessageEvent) => {
+    const route = event.data as { type?: string; path?: string };
+    if (route?.type !== "navigate-to-route" || typeof route.path !== "string") return;
+    routes.push({ type: route.type, path: route.path });
+    if (route.path !== "/local/thread-delayed") return;
+    const delayed = window.document.createElement("button");
+    delayed.dataset.appActionSidebarThreadId = "local:thread-delayed";
+    delayed.dataset.appActionSidebarThreadSelected = "true";
+    window.document.querySelector("aside nav")!.append(delayed);
   });
   send(window, frame.contentWindow!, BOARD_ORIGIN, {
     type: "feature-kanban:open-session",
     challenge: "challenge-two",
-    externalSessionId: "thread-route",
+    externalSessionId: "thread-delayed",
   });
-  await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
-  assert.equal(routes.length, 1);
-  assert.equal((routes[0] as { type: string }).type, "navigate-to-route");
-  assert.equal((routes[0] as { path: string }).path, "/local/thread-route");
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+  assert.equal(responses.at(-1)?.ok, true);
+  assert.deepEqual(routes, [{ type: "navigate-to-route", path: "/local/thread-delayed" }]);
 
-  Object.defineProperty(window, "electronBridge", { configurable: true, value: undefined });
+  window.document.querySelector("[data-app-action-sidebar-thread-id='local:thread-delayed']")?.remove();
   send(window, frame.contentWindow!, BOARD_ORIGIN, {
     type: "feature-kanban:open-session",
     challenge: "challenge-two",
     externalSessionId: "thread-failure",
   });
-  await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
   assert.equal(responses.at(-1)?.ok, false);
+  assert.match(responses.at(-1)?.error ?? "", /尚未出现在 Codex 侧边栏/);
+  assert.deepEqual(routes.at(-1), { type: "navigate-to-route", path: "/local/thread-failure" });
   (window as unknown as { __featureKanban: { dispose(): void } }).__featureKanban.dispose();
   dom.window.close();
 });

@@ -1,0 +1,40 @@
+<div class="task-backdrop" aria-hidden="true" (click)="requestClose()"></div>
+<section #dialog class="task-dialog" role="dialog" aria-modal="true" aria-labelledby="create-task-title">
+  <header>
+    <div>
+      <span class="eyebrow">{{ projectName }} / Codex</span>
+      <h2 id="create-task-title">创建任务</h2>
+      <p>这段文字会成为新对话的第一条提示词，并立即开始执行。</p>
+    </div>
+    <button class="close-button" type="button" aria-label="关闭创建任务弹窗" [disabled]="submitting()" (click)="requestClose()">×</button>
+  </header>
+
+  <div class="task-body">
+    <label for="task-prompt">第一条提示词</label>
+    <textarea
+      #promptInput
+      id="task-prompt"
+      rows="7"
+      maxlength="4000"
+      placeholder="描述希望 Codex 在当前项目中完成的工作…"
+      [value]="prompt()"
+      [disabled]="submitting() || !!threadId()"
+      (input)="updatePrompt($event)"
+    ></textarea>
+    <span class="counter">{{ prompt().length }} / 4000</span>
+    @if (error()) { <p class="task-error" role="alert">{{ error() }}</p> }
+  </div>
+
+  <footer>
+    @if (threadId()) {
+      <div class="launch-status"><i></i><span>Codex 对话已创建，首条提示词正在执行。</span></div>
+      <button class="open-task" type="button" (click)="openTask()">打开 Codex 对话</button>
+      @if (openAttempted() && host.navigationError()) { <p class="navigation-error" role="alert">{{ host.navigationError() }}</p> }
+    } @else {
+      <button type="button" [disabled]="submitting()" (click)="requestClose()">取消</button>
+      <button class="confirm" type="button" [disabled]="submitting() || !prompt().trim()" (click)="submit()">
+        {{ submitting() ? "正在创建…" : "确定" }}
+      </button>
+    }
+  </footer>
+</section>

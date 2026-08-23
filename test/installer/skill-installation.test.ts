@@ -316,7 +316,7 @@ windowsTest("first-install finalization writes an uninstallable manifest before 
     const userRoot = resolve(root, "user");
     const desktopRoot = resolve(root, "desktop");
     const programsRoot = resolve(root, "start-menu", "programs");
-    for (const folder of ["app", "runtime", "installer"]) {
+    for (const folder of ["app", "installer"]) {
       const source = resolve(packageRoot, folder);
       mkdirSync(source, { recursive: true });
       writeFileSync(resolve(source, "payload.txt"), folder, "utf8");
@@ -357,7 +357,7 @@ windowsTest("rejects unavailable shortcut folders before copying the package or 
     const installRoot = resolve(root, "programs", "Feature Kanban");
     const userRoot = resolve(root, "user");
     const skillMarker = resolve(root, "skill-install-called.txt");
-    for (const folder of ["app", "runtime", "installer"]) {
+    for (const folder of ["app", "installer"]) {
       const source = resolve(packageRoot, folder);
       mkdirSync(source, { recursive: true });
       writeFileSync(resolve(source, "payload.txt"), folder, "utf8");
@@ -392,12 +392,14 @@ windowsTest("an existing installation reuses its recorded allowed desktop shortc
     const desktopRoot = resolve(root, "desktop");
     const programsRoot = resolve(root, "start-menu", "programs");
     const recordedShortcut = resolve(desktopRoot, "Codex (Feature Kanban).lnk");
-    for (const folder of ["app", "runtime", "installer"]) {
+    for (const folder of ["app", "installer"]) {
       const source = resolve(packageRoot, folder);
       mkdirSync(source, { recursive: true });
       writeFileSync(resolve(source, "payload.txt"), folder, "utf8");
     }
     mkdirSync(installRoot, { recursive: true });
+    mkdirSync(resolve(installRoot, "runtime"), { recursive: true });
+    writeFileSync(resolve(installRoot, "runtime", "node.exe"), "legacy-runtime", "utf8");
     const installScript = resolve(process.cwd(), "installer", "install.ps1");
     const result = powerShellUtf8Json(
       `$recorded = ${quote(recordedShortcut)}; `
@@ -411,11 +413,12 @@ windowsTest("an existing installation reuses its recorded allowed desktop shortc
       + `$script:shortcutAttempt = $null; `
       + `function New-FeatureKanbanShortcut { param([string] $Path, [string] $Root, [string] $LaunchKind) $script:shortcutAttempt = $Path; throw 'simulated shortcut failure' }; `
       + `$failure = $null; try { Invoke-FeatureKanbanInstall } catch { $failure = $_.Exception.Message + ' | ' + $_.ScriptStackTrace }; `
-      + `[PSCustomObject]@{ recorded = $recorded; shortcutAttempt = $script:shortcutAttempt; failure = $failure }`,
+      + `[PSCustomObject]@{ recorded = $recorded; shortcutAttempt = $script:shortcutAttempt; failure = $failure; runtimeExists = (Test-Path -LiteralPath ${quote(resolve(installRoot, "runtime"))}) }`,
     );
 
     assert.match(String(result["failure"]), /^simulated shortcut failure/);
     assert.equal(result["shortcutAttempt"], result["recorded"]);
+    assert.equal(result["runtimeExists"], false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

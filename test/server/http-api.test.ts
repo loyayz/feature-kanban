@@ -14,6 +14,8 @@ import { resolveServerConfig } from "../../src/server/config.js";
 import { EventHub } from "../../src/server/event-hub.js";
 import { LocalResourceOperationError } from "../../src/server/errors.js";
 import type { LocalCardResources } from "../../src/server/local-card-resources.js";
+import type { CodexTaskRunner, RunningCodexTask } from "../../src/server/codex-task-runner.js";
+import { CodexProtocolError, CodexRuntimeUnavailableError } from "../../src/server/errors.js";
 
 const card: CreateCardInput = {
   cardId: "6b6e7f6e-aafb-48af-9809-a78135db03a8",
@@ -64,6 +66,7 @@ async function appFixture(
   t: TestContext,
   eventHub = new RecordingEventHub(),
   localResources?: LocalCardResources,
+  codexTaskRunner?: CodexTaskRunner,
 ): Promise<{ app: FeatureKanbanApp; baseUrl: string; eventHub: RecordingEventHub }> {
   const directory = mkdtempSync(join(tmpdir(), "feature-kanban-http-"));
   const app = createFeatureKanbanApp({
@@ -72,6 +75,7 @@ async function appFixture(
     staticDirectory: join(directory, "web"),
     eventHub,
     ...(localResources ? { localResources } : {}),
+    ...(codexTaskRunner ? { codexTaskRunner } : {}),
   });
   const address = await app.listen() as AddressInfo;
   t.after(async () => {
@@ -81,7 +85,24 @@ async function appFixture(
   return { app, baseUrl: `http://127.0.0.1:${address.port}`, eventHub };
 }
 
-test("creates, retries, filters, fetches, updates, and archives cards", async (t) => {
+class RecordingCodexRunner implements CodexTaskRunner {
+  readonly calls: Array<{ cwd: string; prompt: string }> = [];
+  private completeActive: (() => void) | undefined;
+
+  async start(input: { cwd: string; prompt: string }): Promise<RunningCodexTask> {
+    this.calls.push(input);
+    let complete!: () => void;
+    const completion = new Promise<void>((resolve) => { complete = resolve; });
+    this.completeActive = complete;
+    return { threadId: `thread-${this.calls.length}`, completion, stop: async () => complete() };
+  }
+
+  complete(): void {
+    this.completeActive?.();
+  }
+}
+
+test("creates, retries, filters, fetches, and automatically archives completed cards", async (t) => {
   const { baseUrl, eventHub } = await appFixture(t);
   const create = await fetch(`${baseUrl}/api/cards`, {
     method: "POST",
@@ -108,8 +129,8 @@ test("creates, retries, filters, fetches, updates, and archives cards", async (t
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      stage: "implementation_planning",
-      progress: { stage: "implementation_planning", step: "planning" },
+      stage: "completed",
+      progress: { stage: "completed", step: "integrated" },
       waitingForUser: false,
       blocked: false,
       aiTool: "codex",
@@ -119,6 +140,8 @@ test("creates, retries, filters, fetches, updates, and archives cards", async (t
     }),
   });
   assert.equal(update.status, 200);
+  assert.equal(((await update.json()) as { card: { archived: boolean } }).card.archived, true);
+  assert.deepEqual(eventHub.events.at(-1), { type: "card.updated", cardId: card.cardId });
 
   const hide = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(card.projectName)}/visibility`, {
     method: "PATCH",
@@ -129,14 +152,16 @@ test("creates, retries, filters, fetches, updates, and archives cards", async (t
   assert.equal(((await hide.json()) as { project: { hidden: boolean } }).project.hidden, true);
   assert.deepEqual(eventHub.events.at(-1), { type: "project.updated", projectName: card.projectName });
 
-  const archive = await fetch(`${baseUrl}/api/cards/${card.cardId}/archive`, {
+  const removedArchiveEndpoint = await fetch(`${baseUrl}/api/cards/${card.cardId}/archive`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ archived: true }),
   });
-  assert.equal(archive.status, 200);
+  assert.equal(removedArchiveEndpoint.status, 404);
   const archived = await fetch(`${baseUrl}/api/cards?archived=true`);
   assert.equal(((await archived.json()) as { cards: unknown[] }).cards.length, 1);
+  const active = await fetch(`${baseUrl}/api/cards?archived=false`);
+  assert.equal(((await active.json()) as { cards: unknown[] }).cards.length, 0);
 });
 
 test("opens projects and reads specs only from paths stored on the card", async (t) => {
@@ -253,6 +278,91 @@ test("rejects non-loopback browser origins but permits non-browser local clients
   assert.equal(rejected.status, 403);
   const accepted = await fetch(`${baseUrl}/api/health`);
   assert.equal(accepted.status, 200);
+});
+
+test("creates a Codex thread and immediately starts its first prompt in the stored project directory", async (t) => {
+  const projectDirectory = mkdtempSync(join(tmpdir(), "feature-kanban-codex-project-"));
+  t.after(() => rmSync(projectDirectory, { recursive: true, force: true }));
+  const runner = new RecordingCodexRunner();
+  const { baseUrl } = await appFixture(t, new RecordingEventHub(), undefined, runner);
+  await fetch(`${baseUrl}/api/cards`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...card, projectPath: projectDirectory }),
+  });
+
+  const created = await fetch(`${baseUrl}/api/codex/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectName: card.projectName, prompt: "  Inspect this repository.  " }),
+  });
+  assert.equal(created.status, 202);
+  assert.deepEqual(await created.json(), { threadId: "thread-1", status: "in_progress" });
+  assert.deepEqual(runner.calls, [{ cwd: projectDirectory, prompt: "Inspect this repository." }]);
+
+  const busy = await fetch(`${baseUrl}/api/codex/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectName: card.projectName, prompt: "second" }),
+  });
+  assert.equal(busy.status, 409);
+  runner.complete();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await fetch(`${baseUrl}/api/codex/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectName: card.projectName, prompt: "third" }),
+  })).status, 202);
+});
+
+test("rejects invalid and unsafe Codex task requests before invoking the runner", async (t) => {
+  const runner = new RecordingCodexRunner();
+  const { baseUrl } = await appFixture(t, new RecordingEventHub(), undefined, runner);
+  for (const body of [
+    { projectName: "all", prompt: "do work" },
+    { projectName: "missing", prompt: "do work" },
+    { projectName: "missing", prompt: "" },
+    { projectName: "missing", prompt: "do work", projectPath: "C:\\attacker" },
+    { projectName: "missing", prompt: "x".repeat(4001) },
+  ]) {
+    const response = await fetch(`${baseUrl}/api/codex/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, body.projectName === "missing" && body.prompt === "do work" && !('projectPath' in body) ? 409 : 400);
+  }
+  assert.equal(runner.calls.length, 0);
+});
+
+test("maps Codex runtime and protocol startup failures to stable statuses", async (t) => {
+  const projectDirectory = mkdtempSync(join(tmpdir(), "feature-kanban-codex-errors-"));
+  t.after(() => rmSync(projectDirectory, { recursive: true, force: true }));
+  for (const [error, expected] of [
+    [new CodexRuntimeUnavailableError("Codex runtime is unavailable"), 503],
+    [new CodexProtocolError("Codex app-server rejected the request"), 502],
+  ] as const) {
+    const runner: CodexTaskRunner = { start: async () => { throw error; } };
+    const { baseUrl } = await appFixture(t, new RecordingEventHub(), undefined, runner);
+    await fetch(`${baseUrl}/api/cards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...card,
+        cardId: crypto.randomUUID(),
+        projectPath: projectDirectory,
+        lifecycleDocumentPath: `${projectDirectory}\\${crypto.randomUUID()}.md`,
+        session: { sessionRecordId: crypto.randomUUID(), aiTool: "codex" },
+      }),
+    });
+    const response = await fetch(`${baseUrl}/api/codex/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectName: card.projectName, prompt: "do work" }),
+    });
+    assert.equal(response.status, expected);
+    await response.body?.cancel();
+  }
 });
 
 test("does not publish SSE events when the database transaction fails", async (t) => {

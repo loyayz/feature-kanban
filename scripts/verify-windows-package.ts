@@ -12,7 +12,6 @@ interface PackageManifest {
 }
 
 const requiredFiles = [
-  "runtime/node.exe",
   "app/server/server/index.js",
   "app/server/server/standalone.js",
   "app/server/launcher/index.js",
@@ -20,10 +19,22 @@ const requiredFiles = [
   "app/inject/feature-kanban.user.js",
   "app/skills/feature-lifecycle/SKILL.md",
   "app/skills/feature-lifecycle/references/feature-kanban-api.md",
+  "app/skills/feature-lifecycle/references/stage-5-integration.md",
   "installer/install.ps1",
   "installer/launch-codex-hidden.vbs",
   "installer/uninstall.ps1",
 ];
+
+function assertNoBundledRuntime(paths: string[]): void {
+  const forbidden = paths.find((path) => {
+    const normalized = path.replaceAll("\\", "/").toLowerCase();
+    return normalized.includes("/node_modules/@openai/codex/")
+      || /\/node_modules\/@openai\/codex-(?:win32|darwin|linux)-/u.test(normalized)
+      || normalized.includes("/vendor/")
+      || /\/(?:node|codex)(?:\.exe)?$/u.test(normalized);
+  });
+  if (forbidden) throw new Error(`Package contains a bundled Codex or Node runtime: ${forbidden}`);
+}
 
 function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -37,6 +48,7 @@ export function verifyWindowsPackage(packageRoot: string): { fileCount: number; 
     throw new Error("Package manifest identity is invalid");
   }
   const byPath = new Map(manifest.files.map((entry) => [entry.path.replaceAll("\\", "/"), entry]));
+  assertNoBundledRuntime([...byPath.keys()]);
   for (const required of requiredFiles) {
     if (!byPath.has(required)) throw new Error(`Required package file is absent from manifest: ${required}`);
   }

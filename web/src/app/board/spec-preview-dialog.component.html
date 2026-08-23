@@ -1,0 +1,17 @@
+<div class="preview-backdrop" aria-hidden="true" (click)="closePreview.emit()"></div>
+<section #dialog class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="spec-preview-title">
+  <header>
+    <div class="preview-heading">
+      <span>需求文档</span>
+      <h2 id="spec-preview-title">规格预览</h2>
+      <code [title]="document.path">{{ document.path }}</code>
+    </div>
+    <div class="preview-actions">
+      <button type="button" (click)="copyPath.emit(document.path)">复制路径</button>
+      <button #closeButton class="close-button" type="button" aria-label="关闭需求文档预览" (click)="closePreview.emit()">×</button>
+    </div>
+  </header>
+  <div class="preview-body">
+    <fk-markdown-preview [content]="document.content" />
+  </div>
+</section>

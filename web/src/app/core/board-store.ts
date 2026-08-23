@@ -156,20 +156,6 @@ export class BoardStore {
     this.detailLoadingState.set(false);
   }
 
-  archiveDetail(archived: boolean): void {
-    const current = this.detailState();
-    if (!current) return;
-    const generation = this.detailGeneration;
-    this.api.setArchived(current.id, archived).subscribe({
-      next: () => {
-        if (generation === this.detailGeneration && this.detailState()?.id === current.id) {
-          this.closeDetail();
-        }
-        this.load();
-      },
-    });
-  }
-
   clearMovement(): void {
     this.lastMovementState.set(null);
   }

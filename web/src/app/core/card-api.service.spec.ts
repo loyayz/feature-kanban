@@ -68,8 +68,10 @@ describe("CardApiService notifications", () => {
     api.setProjectHidden("alpha/project", true).subscribe();
     api.openProject("card/a").subscribe();
     api.getSpecDocument("card/a").subscribe();
+    api.createCodexTask("alpha", "Build it").subscribe();
     expect(http.patch).toHaveBeenCalledWith("/api/projects/alpha%2Fproject/visibility", { hidden: true });
     expect(http.post).toHaveBeenCalledWith("/api/cards/card%2Fa/open-project", null);
     expect(http.get).toHaveBeenCalledWith("/api/cards/card%2Fa/spec-document");
+    expect(http.post).toHaveBeenCalledWith("/api/codex/tasks", { projectName: "alpha", prompt: "Build it" });
   });
 });

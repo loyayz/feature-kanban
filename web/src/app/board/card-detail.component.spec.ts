@@ -50,14 +50,30 @@ describe("CardDetailComponent", () => {
     [...root.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.trim() === "打开项目")!.click();
     expect(api.openProject).toHaveBeenCalledWith("card-detail");
-    [...root.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.trim() === "预览")!.click();
+    const previewButton = [...root.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "预览")!;
+    previewButton.focus();
+    previewButton.click();
     fixture.detectChanges();
+    await fixture.whenStable();
     root = fixture.nativeElement as HTMLElement;
     expect(api.getSpecDocument).toHaveBeenCalledWith("card-detail");
-    expect(root.querySelector("fk-markdown-preview")).not.toBeNull();
+    expect(root.querySelector("fk-spec-preview-dialog")).not.toBeNull();
+    expect(root.querySelector(".drawer")?.hasAttribute("inert")).toBe(true);
+    expect(root.querySelector(".drawer fk-markdown-preview")).toBeNull();
+    expect(root.querySelector(".drawer")?.textContent).toContain("项目路径");
     expect(root.querySelector("script")).toBeNull();
     expect(root.textContent).toContain("<script>alert(1)</script>");
+    expect(globalThis.document.activeElement).toBe(
+      root.querySelector<HTMLButtonElement>('[aria-label="关闭需求文档预览"]'),
+    );
+    root.querySelector<HTMLButtonElement>('[aria-label="关闭需求文档预览"]')!.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+    expect(root.querySelector("fk-spec-preview-dialog")).toBeNull();
+    expect(root.querySelector(".drawer")?.hasAttribute("inert")).toBe(false);
+    expect(globalThis.document.activeElement).toBe(previewButton);
+    expect(root.querySelector("#detail-title")).not.toBeNull();
   });
 
   it("shows legacy metadata fallbacks and keeps resource failures in the detail", async () => {
@@ -70,5 +86,49 @@ describe("CardDetailComponent", () => {
     expect(root.textContent).toContain("未上报项目路径");
     expect(root.textContent).toContain("未上报 spec 文档");
     expect(root.querySelector("fk-markdown-preview")).toBeNull();
+  });
+
+  it("opens the newest Codex session with a real external ID from the prominent action", async () => {
+    const api = { openProject: vi.fn(), getSpecDocument: vi.fn() };
+    const sessions = [
+      {
+        sessionRecordId: "44444444-4444-4444-8444-444444444444", cardId: "card-detail", aiTool: "claude",
+        jumpUri: "https://example.test/session", startedAt: "2026-08-12T07:00:00.000Z",
+        lastSeenAt: "2026-08-12T07:00:00.000Z", active: false,
+      },
+      {
+        sessionRecordId: "11111111-1111-4111-8111-111111111111", cardId: "card-detail", aiTool: "codex",
+        externalSessionId: "thread-old", startedAt: "2026-08-12T08:00:00.000Z", lastSeenAt: "2026-08-12T08:00:00.000Z", active: false,
+      },
+      {
+        sessionRecordId: "22222222-2222-4222-8222-222222222222", cardId: "card-detail", aiTool: "codex",
+        startedAt: "2026-08-12T09:00:00.000Z", lastSeenAt: "2026-08-12T09:00:00.000Z", active: false,
+      },
+      {
+        sessionRecordId: "33333333-3333-4333-8333-333333333333", cardId: "card-detail", aiTool: "codex",
+        externalSessionId: "thread-new", startedAt: "2026-08-12T10:00:00.000Z", lastSeenAt: "2026-08-12T10:00:00.000Z", active: true,
+      },
+    ];
+    const fixture = await render(api, { sessions });
+    const root = fixture.nativeElement as HTMLElement;
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.filter((button) => button.textContent?.trim() === "打开 Codex 对话")).toHaveLength(1);
+    expect(buttons.filter((button) => button.textContent?.trim() === "打开会话")).toHaveLength(1);
+    root.querySelector<HTMLButtonElement>(".codex-entry button")!.click();
+    expect(fixture.componentInstance.host.openCodexSession).toHaveBeenCalledWith("thread-new");
+    expect(root.querySelector(".codex-entry")?.textContent).toContain("打开这个流程最近一次");
+  });
+
+  it("shows an explicit disabled Codex action when no real external ID exists", async () => {
+    const api = { openProject: vi.fn(), getSpecDocument: vi.fn() };
+    const fixture = await render(api, {
+      sessions: [{
+        sessionRecordId: "22222222-2222-4222-8222-222222222222", cardId: "card-detail", aiTool: "codex",
+        startedAt: "2026-08-12T09:00:00.000Z", lastSeenAt: "2026-08-12T09:00:00.000Z", active: true,
+      }],
+    });
+    const entry = (fixture.nativeElement as HTMLElement).querySelector(".codex-entry")!;
+    expect(entry.textContent).toContain("暂无可打开的 Codex 对话");
+    expect(entry.querySelector<HTMLButtonElement>("button")?.disabled).toBe(true);
   });
 });

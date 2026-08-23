@@ -11,7 +11,7 @@ import { CodexSupervisor } from "./codex-supervisor.js";
 import { NativeMacProcessAdapter } from "./macos-processes.js";
 import { showFatalMessage, showWarningMessage } from "./message-box.js";
 import type { DesktopProcessAdapter } from "./processes.js";
-import { installedServiceRuntime, ServiceSupervisor } from "./service-supervisor.js";
+import { assertSupportedNodeRuntime, installedServiceRuntime, ServiceSupervisor } from "./service-supervisor.js";
 import { acquireSingleInstance } from "./single-instance.js";
 import { NativeWindowsProcessAdapter } from "./windows-processes.js";
 
@@ -77,6 +77,7 @@ export function nativeProcessAdapter(platform: NodeJS.Platform = process.platfor
 }
 
 async function main(): Promise<void> {
+  assertSupportedNodeRuntime();
   const installRoot = process.env.FEATURE_KANBAN_INSTALL_ROOT ?? process.cwd();
   const packaged = Boolean(process.env.FEATURE_KANBAN_INSTALL_ROOT);
   const uninstallRequested = process.argv.slice(2).includes("--uninstall");

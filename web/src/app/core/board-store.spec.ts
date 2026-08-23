@@ -23,7 +23,6 @@ describe("BoardStore", () => {
       ),
       listProjects: vi.fn(() => of(projects)),
       getCard: vi.fn((id: string) => of(source.find((card) => card.id === id)!)),
-      setArchived: vi.fn(),
       setProjectHidden: vi.fn((projectName: string, hidden: boolean) => of({
         ...projects.find((project) => project.name === projectName)!,
         hidden,
@@ -218,31 +217,5 @@ describe("BoardStore", () => {
     expect(store.cards()[0]?.stage).toBe("implementing_and_reviewing");
     expect(store.projects()).toEqual(currentProjects);
     expect(store.loading()).toBe(false);
-  });
-
-  it("does not close a newly opened detail when an older archive request completes", () => {
-    const archiveResponse = new Subject<CardDetail>();
-    const detailResponse = new Subject<CardDetail>();
-    const api = {
-      getCard: vi.fn(() => detailResponse),
-      setArchived: vi.fn(() => archiveResponse),
-      listCards: vi.fn(() => of([])),
-      listProjects: vi.fn(() => of(projects)),
-    } as unknown as CardApiService;
-    const refreshes = new Subject<RefreshResult>();
-    const coordinator = { refreshes$: refreshes } as unknown as CardRefreshCoordinator;
-    const motion = { capture: vi.fn(), play: vi.fn() } as unknown as CardMotionService;
-    const store = new BoardStore(api, coordinator, motion);
-
-    store.openDetail("card-alpha");
-    detailResponse.next(makeCard("card-alpha"));
-    store.archiveDetail(true);
-    store.openDetail("card-beta");
-    detailResponse.next(makeCard("card-beta"));
-    archiveResponse.next(makeCard("card-alpha", "designing", { archived: true }));
-    archiveResponse.complete();
-
-    expect(store.detail()?.id).toBe("card-beta");
-    expect(api.listCards).toHaveBeenCalledOnce();
   });
 });

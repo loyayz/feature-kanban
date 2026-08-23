@@ -1,17 +1,16 @@
 # Feature Kanban API reference
 
-Use this reference only when reporting a `feature-lifecycle` flow. The service is a local optional projection at `http://127.0.0.1:46171`.
+Use this reference only when reporting a `feature-lifecycle` flow. The service is a local non-blocking projection at `http://127.0.0.1:46171`; non-blocking errors never make the required lifecycle calls optional.
 
-## Identity and retry
+## Identity and call discipline
 
 - Generate `cardId` and `sessionRecordId` as UUIDs and persist them in the lifecycle document before network I/O.
-- `POST /api/cards` with the same `cardId` returns the existing card and does not overwrite its snapshot or archive state.
-- A reused `cardId` with a different `projectName` or `lifecycleDocumentPath` returns `409` identity conflict. Stop reporting that flow until the local ID error is resolved.
-- After a confirmed `200` or `201` create response, use full `PATCH` snapshots.
+- Reusing the same `cardId` makes `POST /api/cards` idempotent server-side and does not overwrite the existing snapshot or archive state; the caller still discards the response.
+- Issue `POST /api/cards` once, discard its response, and use full `PATCH` snapshots for every later stage or state transition regardless of the POST result.
 - Project identity is the basename of the original repository root. Same-named directories intentionally merge.
 - `projectPath` is the full absolute path of that original repository root, never the linked feature worktree. Lifecycle callers must send it on create even though the API remains optional for older clients.
 - Card `title` is exactly `<feature-slug>` and excludes the lifecycle document's leading `YYYY-MM-DD-` date and `.md` extension.
-- On connection failure, record the error in the lifecycle document; do not retry in a loop and do not start the service.
+- Use an exact 500ms timeout for every call and discard the response without parsing its body or status. A call failure is not recorded, retried, or allowed to block the lifecycle; do not start the service.
 
 ## Endpoints
 
@@ -21,7 +20,6 @@ Use this reference only when reporting a `feature-lifecycle` flow. The service i
 | POST | `/api/cards` | Idempotent create |
 | PATCH | `/api/cards/{cardId}` | Replace mutable snapshot and activate session |
 | GET | `/api/cards/{cardId}` | Read one card and all sessions |
-| PATCH | `/api/cards/{cardId}/archive` | User-facing archive state |
 
 ## Create payload
 
@@ -44,11 +42,12 @@ Use this reference only when reporting a `feature-lifecycle` flow. The service i
   "branch": "feat/2026-08-12-feature-lifecycle-kanban",
   "session": {
     "sessionRecordId": "40ea2585-ee15-4098-a20a-a0d9d3329660",
-    "aiTool": "codex",
-    "externalSessionId": "019ff483-21a6-70c0-a246-205c1f7cad0d"
+    "aiTool": "codex"
   }
 }
 ```
+
+This create example is intentionally anonymous. When the runtime does not expose a real external session ID, omit `externalSessionId` from the `session` object entirely. The lifecycle document may use `unavailable` as a local human-readable placeholder, but API JSON must never send `externalSessionId` as `null`, an empty string, or `unavailable`.
 
 ## PATCH payload
 
@@ -79,6 +78,8 @@ Every PATCH sends all mutable fields. Omit `blockedReason` only when `blocked` i
 }
 ```
 
+The PATCH example shows identity supplementation after a real external session ID becomes available: retain the original `sessionRecordId` and add `externalSessionId` to that same session. If the ID is still unavailable, continue to omit the property completely; `null`, an empty string, and `unavailable` are invalid API values.
+
 Optional session `jumpUri` accepts HTTPS or a `codex:` URI. Do not invent a real session ID or link when the runtime does not expose one.
 
 After Stage 1 has produced and committed the design spec, every later full PATCH snapshot includes `specDocumentPath`. It must be the absolute path to that produced Markdown spec, not the lifecycle document, implementation plan, or an external requirement document. While development is isolated it may point into the feature worktree. Immediately before the final `completed` PATCH, rewrite it to the same repository-relative spec path under the original repository root so worktree cleanup cannot break preview.
@@ -87,13 +88,9 @@ The shipped Feature Lifecycle Skill sends `implementationSummary` on every Stage
 
 ## Completion archive
 
-After successful base integration, report the `completed` / `integrated` snapshot first. When the user chose integration and cleanup, remove the feature worktree and confirm `git branch -d <feature-branch>` succeeded before calling `PATCH /api/cards/{cardId}/archive` with:
+After successful base integration, report the `completed` / `integrated` snapshot. When that full snapshot is persisted, the server archives the card in the same transaction. A later successful non-`completed` full snapshot reactivates the card for a legal stage regression. Do not send a second archive request before or after worktree and branch cleanup.
 
-```json
-{ "archived": true }
-```
-
-An archive failure does not revert the completed lifecycle or restore deleted Git resources. Report the concise error to the user without recreating the deleted lifecycle document, retrying in a loop, or starting the service.
+The completed snapshot remains non-blocking: discard its response, do not record or retry a failure, and do not let its result alter Git cleanup or restore deleted resources.
 
 ## Stage and progress mapping
 
@@ -110,14 +107,31 @@ An archive failure does not revert the completed lifecycle or restore deleted Gi
 
 Stage regression is legal. The API applies the last valid PATCH that arrives and performs no Git checks.
 
-## PowerShell API call
+## PowerShell fire-and-continue API call
 
 ```powershell
-$body = Get-Content -LiteralPath '.feature-kanban-payload.json' -Raw
-Invoke-RestMethod -Method Patch `
-  -Uri "http://127.0.0.1:46171/api/cards/$cardId" `
-  -ContentType 'application/json' `
-  -Body $body
+$body = $payload | ConvertTo-Json -Depth 6
+Add-Type -AssemblyName System.Net.Http
+$client = [System.Net.Http.HttpClient]::new()
+$client.Timeout = [TimeSpan]::FromMilliseconds(500)
+$request = [System.Net.Http.HttpRequestMessage]::new(
+  [System.Net.Http.HttpMethod]::Patch,
+  "http://127.0.0.1:46171/api/cards/$cardId"
+)
+$request.Content = [System.Net.Http.StringContent]::new(
+  $body,
+  [System.Text.Encoding]::UTF8,
+  'application/json'
+)
+try {
+  $response = $client.SendAsync($request).GetAwaiter().GetResult()
+  $response.Dispose()
+} catch {
+  # The local projection never blocks or changes lifecycle control flow.
+} finally {
+  $request.Dispose()
+  $client.Dispose()
+}
 ```
 
-This is a direct REST call, not a CLI. Bound the request timeout in the runtime's HTTP mechanism so a missing local service cannot stall the lifecycle.
+This is a direct REST call, not a CLI. Loading `System.Net.Http` explicitly keeps the example valid in a clean Windows PowerShell 5.1 process. Make exactly one call with the exact 500ms timeout for the corresponding transition, discard the response, ignore errors, and continue the lifecycle without logging or retrying that call. Use the runtime's equivalent millisecond timeout mechanism outside PowerShell.

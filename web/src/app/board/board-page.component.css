@@ -45,6 +45,9 @@ h1 { overflow: hidden; margin: 6px 0 0; color: var(--text); font: 660 20px/1 var
 .segmented button.active { background: var(--signal); color: var(--nav); box-shadow: 0 1px 4px color-mix(in srgb, var(--signal) 28%, transparent); }
 .view-switch button.active { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 4px rgb(20 34 56 / 10%); }
 .refresh { width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text-muted); font: 500 20px/1 var(--font-body); cursor: pointer; }
+.create-task { height: 38px; padding: 0 15px; border: 1px solid var(--signal); border-radius: 8px; background: var(--signal); color: var(--nav); font: 700 12px/1 var(--font-body); cursor: pointer; box-shadow: 0 3px 10px color-mix(in srgb, var(--signal) 20%, transparent); }
+.create-task:hover:not(:disabled) { filter: brightness(.96); }
+.create-task:disabled { border-color: var(--line-strong); background: var(--surface-sunken); color: var(--text-faint); box-shadow: none; cursor: not-allowed; }
 .refresh:hover:not(:disabled) { border-color: var(--signal); color: var(--signal); }
 .refresh:disabled { cursor: wait; opacity: .58; }
 .refresh--loading { animation: refresh-spin 900ms linear infinite; }
@@ -52,8 +55,8 @@ h1 { overflow: hidden; margin: 6px 0 0; color: var(--text); font: 660 20px/1 var
 .statusline span { color: var(--text-soft); font: 630 12px/1 var(--font-body); }
 .statusline i { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--signal); }
 .statusline p { margin: 0; color: var(--text-faint); font: 520 12px/1 var(--font-body); }
-.board { display: grid; min-width: 0; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--line-strong) transparent; transition: opacity 160ms ease; }
-.board--archive { align-content: start; }
+.board { display: grid; min-width: 0; min-height: 0; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--line-strong) transparent; transition: opacity 160ms ease; }
+.board--archive { grid-template-columns: repeat(6, minmax(0, 1fr)); align-content: start; }
 .archive-card { min-width: 0; padding: 12px 9px 0; }
 .archive-empty { display: grid; min-height: 160px; grid-column: 1 / -1; place-items: center; align-content: center; margin: 12px 9px 0; border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--text-faint); }
 .archive-empty span { width: 18px; border-top: 1px solid currentColor; }

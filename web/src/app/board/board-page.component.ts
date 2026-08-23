@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, OnInit, signal } from "@angular/core";
 import type { CardSummary, LifecycleStage } from "../../../../src/shared/lifecycle-contract";
 import { BoardStore } from "../core/board-store";
 import { CardDetailComponent } from "./card-detail.component";
+import { CreateTaskDialogComponent } from "./create-task-dialog.component";
 import { LifecycleCardComponent } from "./lifecycle-card.component";
 import { LifecycleColumnComponent } from "./lifecycle-column.component";
 
 const activeStages = [
+  "initializing",
   "designing",
   "requirements_review",
   "implementation_planning",
@@ -19,6 +21,7 @@ type DisplayStage = (typeof activeStages)[number];
 const activeStageSet = new Set<LifecycleStage>(activeStages);
 
 const stageLabels: Record<DisplayStage, string> = {
+  initializing: "初始化",
   designing: "方案设计",
   requirements_review: "需求评审",
   implementation_planning: "实现计划",
@@ -30,7 +33,7 @@ const stageLabels: Record<DisplayStage, string> = {
 @Component({
   selector: "fk-board-page",
   standalone: true,
-  imports: [LifecycleColumnComponent, LifecycleCardComponent, CardDetailComponent],
+  imports: [LifecycleColumnComponent, LifecycleCardComponent, CardDetailComponent, CreateTaskDialogComponent],
   templateUrl: "./board-page.component.html",
   styleUrl: "./board-page.component.css",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -38,6 +41,7 @@ const stageLabels: Record<DisplayStage, string> = {
 export class BoardPageComponent implements OnInit {
   readonly stages = activeStages;
   readonly stageLabels = stageLabels;
+  readonly taskDialogOpen = signal(false);
   readonly visibleProjects = computed(() => this.store.projects()
     .filter((project) => this.store.showHiddenProjects() || !project.hidden));
   readonly visibleCards = computed<CardSummary[]>(() => this.store.cards()
@@ -58,10 +62,6 @@ export class BoardPageComponent implements OnInit {
   }
 
   projectCount(name: string): number {
-    const selectedProject = this.store.selectedProject();
-    if (selectedProject === "all" || selectedProject === name) {
-      return this.visibleCards().filter((card) => card.projectName === name).length;
-    }
     const project = this.store.projects().find((item) => item.name === name);
     return this.store.archived() ? (project?.archivedCount ?? 0) : (project?.activeCount ?? 0);
   }
@@ -72,5 +72,9 @@ export class BoardPageComponent implements OnInit {
 
   visibleCount(): number {
     return this.visibleCards().length;
+  }
+
+  openTaskDialog(): void {
+    if (this.store.selectedProject() !== "all") this.taskDialogOpen.set(true);
   }
 }

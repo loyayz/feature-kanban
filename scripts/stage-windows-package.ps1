@@ -37,9 +37,7 @@ Copy-PackageTree (Join-Path $repoRoot 'skills') (Join-Path $stageRoot 'app\skill
 Copy-PackageTree (Join-Path $repoRoot 'installer') (Join-Path $stageRoot 'installer')
 
 $nodeSource = if ($env:NVM_SYMLINK) { Join-Path $env:NVM_SYMLINK 'node.exe' } else { (Get-Command node.exe -ErrorAction Stop).Source }
-if (-not (Test-Path -LiteralPath $nodeSource)) { throw "Node runtime missing: $nodeSource" }
-New-Item -ItemType Directory -Path (Join-Path $stageRoot 'runtime') -Force | Out-Null
-Copy-Item -LiteralPath $nodeSource -Destination (Join-Path $stageRoot 'runtime\node.exe') -Force
+if (-not (Test-Path -LiteralPath $nodeSource)) { throw "Build Node.js is missing: $nodeSource" }
 
 $files = @(Get-ChildItem -LiteralPath $stageRoot -File -Recurse | Sort-Object FullName | ForEach-Object {
     [PSCustomObject]@{

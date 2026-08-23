@@ -2,6 +2,8 @@ import { appendFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { CardRepository } from "./card-repository.js";
+import { CodexAppServerTaskRunner } from "./codex-app-server-runner.js";
+import { CodexTaskCoordinator, type CodexTaskRunner } from "./codex-task-runner.js";
 import { type ConfigOverrides, resolveServerConfig, type ServerConfig } from "./config.js";
 import { openDatabase, type FeatureKanbanDatabase } from "./database.js";
 import { EventHub } from "./event-hub.js";
@@ -20,6 +22,7 @@ export interface AppOverrides extends ConfigOverrides {
   database?: FeatureKanbanDatabase;
   eventHub?: EventHub;
   localResources?: LocalCardResources;
+  codexTaskRunner?: CodexTaskRunner;
 }
 
 export function createFeatureKanbanApp(overrides: AppOverrides = {}): FeatureKanbanApp {
@@ -27,10 +30,15 @@ export function createFeatureKanbanApp(overrides: AppOverrides = {}): FeatureKan
   const database = overrides.database ?? openDatabase(config.databasePath);
   const repository = new CardRepository(database.connection);
   const eventHub = overrides.eventHub ?? new EventHub();
+  const codexTasks = new CodexTaskCoordinator(
+    repository,
+    overrides.codexTaskRunner ?? new CodexAppServerTaskRunner(),
+  );
   const server = createServer(createRequestHandler({
     repository,
     eventHub,
     localResources: overrides.localResources ?? new NativeLocalCardResources(),
+    codexTasks,
     staticDirectory: config.staticDirectory,
     version: config.version,
   }));
@@ -47,19 +55,16 @@ export function createFeatureKanbanApp(overrides: AppOverrides = {}): FeatureKan
         resolve(server.address() as AddressInfo);
       });
     }),
-    close: () => new Promise<void>((resolve, reject) => {
+    close: async () => {
       eventHub.close();
-      server.close((error) => {
-        try {
-          database.close();
-        } catch (closeError) {
-          reject(closeError as Error);
-          return;
-        }
+      const serverClosed = new Promise<void>((resolve, reject) => server.close((error) => {
         if (error) reject(error);
         else resolve();
-      });
-    }),
+      }));
+      await codexTasks.close();
+      await serverClosed;
+      database.close();
+    },
   };
 }
 

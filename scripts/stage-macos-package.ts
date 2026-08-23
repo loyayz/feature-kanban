@@ -29,7 +29,6 @@ export interface StageMacAppOptions {
   architecture: MacArchitecture;
   productVersion: string;
   nodeVersion: string;
-  runtimePath: string;
   bootstrapPath: string;
   enforceRepositoryOutput?: boolean;
 }
@@ -167,15 +166,12 @@ export async function stageMacApp(options: StageMacAppOptions): Promise<StagedMa
   if (options.enforceRepositoryOutput) {
     await validateProductionOutputBase(repoRoot, options.outputBase);
   }
-  const runtimePath = resolve(options.runtimePath);
   const bootstrapPath = resolve(options.bootstrapPath);
-  await requireRegularFile(runtimePath, "Node runtime");
   await requireRegularFile(bootstrapPath, "Swift bootstrap");
-  const runtimeArchitecture = await readThinMachOArchitecture(runtimePath);
   const bootstrapArchitecture = await readThinMachOArchitecture(bootstrapPath);
-  if (runtimeArchitecture !== options.architecture || bootstrapArchitecture !== options.architecture) {
+  if (bootstrapArchitecture !== options.architecture) {
     throw new Error(
-      `macOS staging architecture mismatch: requested ${options.architecture}, runtime ${runtimeArchitecture}, bootstrap ${bootstrapArchitecture}`,
+      `macOS staging architecture mismatch: requested ${options.architecture}, bootstrap ${bootstrapArchitecture}`,
     );
   }
   const bundlePath = await safeBundleTarget(options.outputBase, options.architecture);
@@ -184,7 +180,6 @@ export async function stageMacApp(options: StageMacAppOptions): Promise<StagedMa
   await mkdir(resolve(contents, "MacOS"), { recursive: true });
   await mkdir(resources, { recursive: true });
   await copyPayloadFile(bootstrapPath, resolve(contents, "MacOS", MAC_BUNDLE_EXECUTABLE), true);
-  await copyPayloadFile(runtimePath, resolve(contents, "MacOS", "FeatureKanbanNode"), true);
   await copyPayloadTree(resolve(repoRoot, "dist", "server"), resolve(resources, "app", "server"));
   await copyPayloadTree(resolve(repoRoot, "dist", "web"), resolve(resources, "app", "web"));
   await copyPayloadFile(
@@ -233,7 +228,6 @@ export function parseStageMacArguments(args: string[]): StageMacAppOptions {
     architecture,
     productVersion: readOption(args, "--product-version"),
     nodeVersion: readOption(args, "--node-version"),
-    runtimePath: readOption(args, "--runtime"),
     bootstrapPath: readOption(args, "--bootstrap"),
     enforceRepositoryOutput: true,
   };

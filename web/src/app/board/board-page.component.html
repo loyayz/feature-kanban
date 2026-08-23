@@ -60,6 +60,13 @@
         </div>
       </div>
       <div class="toolbar__actions">
+        <button
+          class="create-task"
+          type="button"
+          [disabled]="store.selectedProject() === 'all'"
+          [attr.title]="store.selectedProject() === 'all' ? '请先选择一个具体项目' : '在 ' + store.selectedProject() + ' 中创建 Codex 任务'"
+          (click)="openTaskDialog()"
+        >创建任务</button>
         <div class="view-switch" aria-label="卡片视图">
           <button type="button" [class.active]="!store.archived()" [attr.aria-pressed]="!store.archived()" (click)="store.setArchived(false)">进行中</button>
           <button type="button" [class.active]="store.archived()" [attr.aria-pressed]="store.archived()" (click)="store.setArchived(true)">已归档</button>
@@ -101,6 +108,10 @@
   </section>
 
   @if (store.detail(); as detail) {
-    <fk-card-detail [card]="detail" (closeDetail)="store.closeDetail()" (archive)="store.archiveDetail($event)" />
+    <fk-card-detail [card]="detail" (closeDetail)="store.closeDetail()" />
+  }
+
+  @if (taskDialogOpen() && store.selectedProject() !== 'all') {
+    <fk-create-task-dialog [projectName]="store.selectedProject()" (closeDialog)="taskDialogOpen.set(false)" />
   }
 </main>

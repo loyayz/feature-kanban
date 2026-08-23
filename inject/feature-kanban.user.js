@@ -9,9 +9,9 @@
   const ACTIVE_ENTRY_CLASS = "bg-token-list-hover-background";
   const INACTIVE_NATIVE_SELECTION_CSS = `
     aside nav [aria-current="page"]:not(#${ENTRY_ID}),
-    aside nav [data-app-action-sidebar-thread-selected="true"],
+    aside nav [data-app-action-sidebar-thread-selected="true"]:not(#${ENTRY_ID}),
     [data-sidebar] nav [aria-current="page"]:not(#${ENTRY_ID}),
-    [data-sidebar] nav [data-app-action-sidebar-thread-selected="true"] {
+    [data-sidebar] nav [data-app-action-sidebar-thread-selected="true"]:not(#${ENTRY_ID}) {
       background-color: transparent !important;
     }
   `;
@@ -107,6 +107,13 @@
       entry.setAttribute("aria-pressed", String(active));
       entry.dataset.active = String(active);
       entry.classList.toggle(ACTIVE_ENTRY_CLASS, active);
+      if (active) {
+        entry.setAttribute("aria-current", "page");
+        entry.dataset.appActionSidebarThreadSelected = "true";
+      } else {
+        entry.removeAttribute("aria-current");
+        delete entry.dataset.appActionSidebarThreadSelected;
+      }
     }
   }
 
@@ -133,6 +140,10 @@
     entry.setAttribute("aria-pressed", String(active));
     entry.dataset.active = String(active);
     entry.classList.toggle(ACTIVE_ENTRY_CLASS, active);
+    if (active) {
+      entry.setAttribute("aria-current", "page");
+      entry.dataset.appActionSidebarThreadSelected = "true";
+    }
   }
 
   function onSidebarClick(event) {
@@ -177,29 +188,94 @@
     frame.contentWindow.postMessage({ type: "feature-kanban:ready", challenge, theme }, BOARD_ORIGIN);
   }
 
+  function findThreadRow(threadId) {
+    return [...document.querySelectorAll("[data-app-action-sidebar-thread-id]")].find(
+      (row) => {
+        const rowId = row.getAttribute("data-app-action-sidebar-thread-id");
+        return rowId === threadId || rowId === `local:${threadId}`;
+      },
+    );
+  }
+
+  function waitForThreadState(threadId, predicate, timeoutMs, timeoutMessage) {
+    const current = findThreadRow(threadId);
+    if (current && predicate(current)) return Promise.resolve(current);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error, row) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        observer.disconnect();
+        if (error) reject(error);
+        else resolve(row);
+      };
+      const inspect = () => {
+        const row = findThreadRow(threadId);
+        if (row && predicate(row)) finish(undefined, row);
+      };
+      const observer = new MutationObserver(inspect);
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["aria-current", "data-app-action-sidebar-thread-selected"],
+      });
+      const timer = setTimeout(() => finish(new Error(timeoutMessage)), timeoutMs);
+      inspect();
+    });
+  }
+
+  function waitForThreadRow(threadId, timeoutMs = 5000) {
+    return waitForThreadState(
+      threadId,
+      () => true,
+      timeoutMs,
+      "该对话尚未出现在 Codex 侧边栏，请刷新或重新打开 Codex 后重试。",
+    );
+  }
+
+  function waitForThreadSelection(threadId) {
+    return waitForThreadState(
+      threadId,
+      (row) => row.getAttribute("data-app-action-sidebar-thread-selected") === "true"
+        || row.getAttribute("aria-current") === "page",
+      2000,
+      "Codex 未能选中目标对话，请刷新或重新打开 Codex 后重试。",
+    );
+  }
+
+  function validThreadId(threadId) {
+    return typeof threadId === "string"
+      && threadId.length >= 8
+      && threadId.length <= 160
+      && /^[a-zA-Z0-9-]+$/.test(threadId);
+  }
+
+  function navigateToThread(threadId) {
+    window.postMessage(
+      { type: "navigate-to-route", path: `/local/${threadId}` },
+      window.location.origin,
+    );
+  }
+
   async function openSession(threadId) {
     if (
-      typeof threadId !== "string"
-      || threadId.length < 8
-      || threadId.length > 160
-      || !/^[a-zA-Z0-9-]+$/.test(threadId)
+      !validThreadId(threadId)
     ) {
       throw new Error("无效的 Codex 会话 ID");
     }
-    const rows = document.querySelectorAll("[data-app-action-sidebar-thread-id]");
-    for (const row of rows) {
-      if (row.getAttribute("data-app-action-sidebar-thread-id") === threadId) {
-        row.click();
-        setActive(false);
-        return;
-      }
+    let row = findThreadRow(threadId);
+    if (!row) {
+      navigateToThread(threadId);
+      row = await waitForThreadRow(threadId, 10_000);
     }
-    const bridge = window.electronBridge;
-    if (!bridge || typeof bridge.sendMessageFromView !== "function") {
-      throw new Error("当前 Codex 版本未提供会话导航桥");
-    }
-    await bridge.sendMessageFromView({ type: "navigate-to-route", path: `/local/${threadId}` });
+    const selected = row.getAttribute("data-app-action-sidebar-thread-selected") === "true"
+      || row.getAttribute("aria-current") === "page";
+    if (!selected) row.click();
+    await waitForThreadSelection(threadId);
     setActive(false);
+    return true;
   }
 
   async function onMessage(event) {

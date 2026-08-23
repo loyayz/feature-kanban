@@ -12,3 +12,4 @@ input { margin: 0 7px 0 0; accent-color: var(--signal); vertical-align: -1px; }
 blockquote { margin: 14px 0; padding: 3px 0 3px 14px; border-left: 3px solid var(--signal); color: var(--text-muted); white-space: pre-wrap; }
 hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line-strong); }
 pre { overflow: auto; margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-sunken); color: var(--text-soft); font: 500 12px/1.55 var(--font-mono); white-space: pre; }
+.inline-code { padding: 2px 5px; border: 1px solid color-mix(in srgb, var(--signal) 18%, var(--line)); border-radius: 5px; background: var(--signal-soft); color: var(--text); font: 560 .92em/1.4 var(--font-mono); overflow-wrap: anywhere; }

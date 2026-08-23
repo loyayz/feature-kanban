@@ -124,7 +124,7 @@ export interface CardFilters {
 }
 
 export interface CardChangedEvent {
-  type: "card.created" | "card.updated" | "card.archived";
+  type: "card.created" | "card.updated";
   cardId: string;
 }
 
@@ -148,6 +148,16 @@ export interface HealthResponse {
   product: "feature-kanban";
   version: string;
   pid: number;
+}
+
+export interface CreateCodexTaskInput {
+  projectName: string;
+  prompt: string;
+}
+
+export interface CreateCodexTaskResponse {
+  threadId: string;
+  status: "in_progress";
 }
 
 export interface ApiErrorBody {

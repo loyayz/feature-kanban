@@ -17,9 +17,9 @@ npm start
 
 运行 `FeatureKanbanSetup.exe` 后，先选择一个本地程序父目录；默认父目录是 `%LOCALAPPDATA%`，实际应用根目录固定为所选目录下的 `Feature Kanban` 子目录。该选择只移动程序文件，不移动数据或 Skill。安装内容包括：
 
-- Node.js 24.15 运行时
 - 编译后的 Node 服务与启动器
 - Angular 静态资源
+- 通过本机 Codex App Server 创建任务的服务端适配层
 - Codex 注入脚本
 - AI 工具共用的完整 `feature-lifecycle` Skill
 - 卸载脚本与安装记录
@@ -37,7 +37,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<程序目录>\Feature 
 - `启动 Codex 与任务看板`：通过无控制台窗口的托管启动器打开 Codex 并注入任务看板；关闭 Codex 后，启动器仍会按服务所有权规则清理自己启动的看板服务。
 - `启动任务看板服务`：不启动 Codex，只在可见窗口中以前台方式运行看板服务；监听成功后自动用默认浏览器打开 `http://127.0.0.1:46171`。关闭窗口或按 Ctrl+C 即停止该服务。端口已被占用时不会接管或终止占用进程，也不会打开浏览器，错误会保留在窗口中。
 
-桌面和安装目录中的入口都使用安装包自带的 Node.js，不依赖系统 Node.js 或用户的 nvm 环境。升级安装会清理旧版本留下的精确开始菜单 `Feature Kanban\Codex` 入口，但不会删除同一开始菜单目录中的其他内容。
+桌面和安装目录中的入口都使用本机 Node.js 24 或更高版本；可通过 `FEATURE_KANBAN_NODE_PATH` 指定绝对路径，否则从启动环境的 PATH 查找。安装包不携带 Node.js。升级安装会清理旧版本留下的精确开始菜单 `Feature Kanban\Codex` 入口，但不会删除同一开始菜单目录中的其他内容。
 
 程序目录支持空格、中文、一般 Unicode、单引号、`&`、括号和方括号。为防止安装或卸载误伤，以下目录会在复制前被拒绝：UNC/网络目录、盘符根目录、重解析点、非法或末尾带空格/点的路径、使打包文件超过 Windows PowerShell 5.1 可靠长度的路径，以及包含非本产品文件的既有 `Feature Kanban` 目录。目录不可写时同样在安装 Skill 或写注册表前停止。已有安装只能原地升级；若要改变程序目录，先卸载再重新安装。
 
@@ -53,7 +53,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<程序目录>\Feature 
 4. 否则启动器创建服务并持有其进程；托管 Codex 退出后只停止这一个服务。
 5. Codex 使用官方默认 profile，仅增加回环 CDP 参数。CDP 固定监听 `127.0.0.1:46172`；该端口被占用时启动器不会启动 Codex。启动器通过 CDP 绕过页面 CSP、注入侧边栏入口，并对替换后的 renderer 重新注入。
 
-注入依赖 Codex 当前的 renderer DOM 标记和 `electronBridge` 路由能力。Codex 更新后若结构改变，看板仍可独立访问，但原生入口/会话跳转可能需要适配。
+注入依赖 Codex 当前的 renderer DOM 标记和内部路由消息。会话跳转优先点击 thread ID 完全匹配的侧边栏条目；找不到时通过 `/local/<threadId>` 路由加载，并验证目标条目已被选中，不会刷新 Renderer 或把旧对话误报为成功。Codex 更新后若结构改变，看板仍可独立访问，但原生入口/会话跳转可能需要适配。
+
+## Headless Codex 任务
+
+看板的验证入口通过本机 `codex app-server` 在服务端创建持久化用户线程并立即执行首条提示词。可用 `FEATURE_KANBAN_CODEX_PATH` 指定 Codex 的绝对可执行文件，否则从服务进程的 PATH 查找 `codex`。安装包不包含 Codex、Node.js 或任何平台原生运行时。
+
+创建任务不要求 Codex Desktop 正在运行。要让任务稍后出现在 Desktop 侧边栏，看板服务与 Desktop 必须由同一个操作系统用户运行并共享同一个 `CODEX_HOME`；以系统服务账号、其他用户或不同 `CODEX_HOME` 创建的线程不会自动出现在当前用户的 Desktop 中。Desktop 已经打开时，点击看板中的“打开 Codex 对话”会通过 Desktop 内部路由加载该线程并将其加入侧边栏，不会刷新整个 Renderer。
 
 本开发任务运行在 Codex 内，因此没有关闭当前 Codex 去执行破坏性的真实启动—退出验收；启动器生命周期使用可注入的假进程、服务与 CDP 端点完成自动验证。
 

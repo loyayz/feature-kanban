@@ -122,7 +122,7 @@ export class CardRepository {
           id, project_name, project_path, title, stage, progress_json, waiting_for_user, blocked,
           blocked_reason, ai_tool, branch, lifecycle_document_path,
           spec_document_path, active_session_record_id, archived, created_at, last_synced_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         input.cardId,
         input.projectName,
@@ -138,6 +138,7 @@ export class CardRepository {
         input.lifecycleDocumentPath,
         input.specDocumentPath ?? null,
         input.session.sessionRecordId,
+        input.stage === "completed" ? 1 : 0,
         timestamp,
         timestamp,
         timestamp,
@@ -159,7 +160,7 @@ export class CardRepository {
           stage = ?, progress_json = ?, waiting_for_user = ?, blocked = ?,
           blocked_reason = ?, ai_tool = ?, branch = ?, active_session_record_id = ?,
           spec_document_path = COALESCE(?, spec_document_path),
-          archived = 0, last_synced_at = ?, updated_at = ?
+          archived = ?, last_synced_at = ?, updated_at = ?
         WHERE id = ?
       `).run(
         input.stage,
@@ -171,6 +172,7 @@ export class CardRepository {
         input.branch,
         input.session.sessionRecordId,
         input.specDocumentPath ?? null,
+        input.stage === "completed" ? 1 : 0,
         timestamp,
         timestamp,
         cardId,
@@ -178,14 +180,6 @@ export class CardRepository {
       if (Number(result.changes) !== 1) throw new NotFoundError("Card not found");
       return this.getCard(cardId);
     });
-  }
-
-  setArchived(cardId: string, archived: boolean): CardDetail {
-    const result = this.database.prepare(
-      "UPDATE cards SET archived = ?, updated_at = ? WHERE id = ?",
-    ).run(archived ? 1 : 0, nowIso(), cardId);
-    if (Number(result.changes) !== 1) throw new NotFoundError("Card not found");
-    return this.getCard(cardId);
   }
 
   getCard(cardId: string): CardDetail {
@@ -234,6 +228,16 @@ export class CardRepository {
       archivedCount: Number(row.archived_count),
       hidden: booleanValue(row.hidden),
     }));
+  }
+
+  listProjectPaths(projectName: string): string[] {
+    const rows = this.database.prepare(`
+      SELECT DISTINCT project_path
+      FROM cards
+      WHERE project_name = ? AND project_path IS NOT NULL AND TRIM(project_path) <> ''
+      ORDER BY project_path COLLATE NOCASE ASC
+    `).all(projectName) as Row[];
+    return rows.map((row) => String(row.project_path));
   }
 
   setProjectHidden(projectName: string, hidden: boolean): ProjectSummary {

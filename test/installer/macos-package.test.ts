@@ -34,7 +34,6 @@ test("stages and verifies deterministic architecture-specific macOS payloads", a
     const verified = await verifyMacAppBundle(staged.bundlePath);
     assert.equal(verified.manifest.architecture, "arm64");
     assert.equal(verified.manifest.nodeVersion, "v24.15.0");
-    assert.equal(await readThinMachOArchitecture(resolve(staged.bundlePath, "Contents", "MacOS", "FeatureKanbanNode")), "arm64");
     assert.ok(verified.manifest.files.some((entry) => (
       entry.path === `Contents/MacOS/${MAC_BUNDLE_EXECUTABLE}` && (entry.mode & 0o111) !== 0
     )));
@@ -48,14 +47,11 @@ test("stages and verifies deterministic architecture-specific macOS payloads", a
         sha256: null,
       },
     );
-    assert.equal(
-      verified.manifest.files.find((entry) => entry.path === "Contents/MacOS/FeatureKanbanNode")?.integrity,
-      "sha256",
-    );
     assert.deepEqual(
       verified.manifest.files.map((entry) => entry.path),
       [...verified.manifest.files.map((entry) => entry.path)].sort((left, right) => left.localeCompare(right, "en")),
     );
+    assert.equal(verified.manifest.files.some((entry) => entry.path.includes("@openai/codex/")), false);
     assert.equal(macDmgFileName("0.1.0", "arm64", false), "FeatureKanban-0.1.0-macos-arm64-unsigned.dmg");
     assert.equal(macDmgFileName("0.1.0", "x64", true), "FeatureKanban-0.1.0-macos-x64.dmg");
   } finally {
@@ -67,14 +63,12 @@ test("rejects architecture and Node metadata mismatches before staging", async (
   const root = mkdtempSync(resolve(tmpdir(), "feature-kanban-mac-metadata-"));
   try {
     const fixture = createMacTestFixture(root, "x64");
-    assert.equal(await readThinMachOArchitecture(fixture.runtimePath), "x64");
     await assert.rejects(stageMacApp({
       repoRoot: fixture.repoRoot,
       outputBase: fixture.outputBase,
       architecture: "arm64",
       productVersion: "0.1.0",
       nodeVersion: "v24.15.0",
-      runtimePath: fixture.runtimePath,
       bootstrapPath: fixture.bootstrapPath,
     }), /architecture mismatch/);
     await assert.rejects(stageMacApp({
@@ -83,11 +77,8 @@ test("rejects architecture and Node metadata mismatches before staging", async (
       architecture: "x64",
       productVersion: "0.1.0",
       nodeVersion: "v24.14.0",
-      runtimePath: fixture.runtimePath,
       bootstrapPath: fixture.bootstrapPath,
     }), /24\.15/);
-    writeFileSync(fixture.runtimePath, Buffer.from("not-mach-o"));
-    await assert.rejects(readThinMachOArchitecture(fixture.runtimePath), /thin 64-bit Mach-O|truncated/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -101,7 +92,6 @@ test("production staging CLI cannot authorize an arbitrary deletion base", () =>
     "--arch", "arm64",
     "--product-version", "0.1.0",
     "--node-version", "v24.15.0",
-    "--runtime", resolve(repoRoot, "node"),
     "--bootstrap", resolve(repoRoot, "bootstrap"),
   ]), /output must be/);
 });
@@ -126,7 +116,6 @@ test("production staging rejects a symlinked dist/macos output root", async (con
       architecture: fixture.architecture,
       productVersion: "0.1.0",
       nodeVersion: "v24.15.0",
-      runtimePath: fixture.runtimePath,
       bootstrapPath: fixture.bootstrapPath,
       enforceRepositoryOutput: true,
     }), /output directory is unsafe/);
@@ -143,7 +132,7 @@ test("outer app signing may rewrite only the declared main executable entry", as
     const staged = await fixture.stage();
     appendFileSync(resolve(staged.bundlePath, "Contents", "MacOS", MAC_BUNDLE_EXECUTABLE), "simulated-code-signature");
     await assert.doesNotReject(verifyMacAppBundle(staged.bundlePath));
-    appendFileSync(resolve(staged.bundlePath, "Contents", "MacOS", "FeatureKanbanNode"), "tampered-helper");
+    appendFileSync(resolve(staged.bundlePath, "Contents", "Resources", "app", "server", "server", "index.js"), "tampered-helper");
     await assert.rejects(verifyMacAppBundle(staged.bundlePath), /size mismatch|hash mismatch/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -203,16 +192,34 @@ test("rejects symlinked payload inputs when the host permits symlink fixtures", 
   }
 });
 
-test("macOS build assets enforce private nvm runtime signing and notarization order", () => {
+test("rejects a staged Codex or Node native runtime", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "feature-kanban-mac-runtime-"));
+  try {
+    const fixture = createMacTestFixture(root);
+    const staged = await fixture.stage();
+    const runtime = resolve(
+      staged.bundlePath,
+      "Contents", "Resources", "app", "node_modules", "@openai", "codex", "vendor", "codex",
+    );
+    mkdirSync(dirname(runtime), { recursive: true });
+    writeFileSync(runtime, "runtime");
+    await writeMacPackageManifest(staged.bundlePath, {
+      productVersion: "0.1.0", architecture: "arm64", nodeVersion: "v24.15.0",
+    });
+    await assert.rejects(verifyMacAppBundle(staged.bundlePath), /bundled Codex or Node runtime/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("macOS build assets use local Node without packaging it and preserve notarization order", () => {
   const script = readFileSync(resolve(process.cwd(), "scripts", "build-macos-installer.sh"), "utf8");
-  const entitlements = readFileSync(resolve(process.cwd(), "installer", "macos", "node.entitlements.plist"), "utf8");
   const bootstrap = readFileSync(resolve(process.cwd(), "installer", "macos", "FeatureKanbanBootstrap.swift"), "utf8");
   assert.match(script, /NODE_SOURCE="\$\{npm_node_execpath:-\}"/);
-  assert.match(script, /cp -p -- "\$NODE_SOURCE" "\$RUNTIME_COPY"/);
+  assert.doesNotMatch(script, /RUNTIME_COPY|cp -p -- "\$NODE_SOURCE"/);
   assert.match(script, /both FEATURE_KANBAN_SIGNING_IDENTITY and FEATURE_KANBAN_NOTARY_PROFILE/);
   assert.match(script, /sysctl\.proc_translated/);
   assert.match(script, /Refusing to build an x64 artifact under Rosetta/);
-  assert.ok(script.indexOf("$RUNTIME_COPY\"") < script.indexOf("stage-macos-package.js"));
   assert.ok(script.indexOf("stage-macos-package.js") < script.indexOf("\"$APP_ROOT\"\n  codesign --verify"));
   const beforeStage = script.slice(0, script.indexOf("stage-macos-package.js"));
   assert.doesNotMatch(beforeStage, /codesign[\s\S]*"\$BOOTSTRAP_COPY"/);
@@ -231,9 +238,13 @@ test("macOS build assets enforce private nvm runtime signing and notarization or
   assert.match(script, /DMG_PATH="\$BUILD_ROOT\/candidate\.dmg"/);
   assert.match(script, /Refusing to replace a symbolic link at the final DMG path/);
   assert.ok(script.indexOf("spctl --assess --type open") < script.indexOf('mv -f "$DMG_PATH" "$FINAL_DMG_PATH"'));
-  assert.match(entitlements, /com\.apple\.security\.cs\.allow-jit/);
-  assert.doesNotMatch(entitlements, /disable-library-validation|allow-unsigned-executable-memory/);
+  assert.doesNotMatch(script, /node\.entitlements|com\.featurekanban\.node/);
   assert.match(bootstrap, /FEATURE_KANBAN_INSTALL_ROOT/);
+  assert.match(bootstrap, /validateNode/);
+  assert.match(bootstrap, /node", "--version"/);
+  assert.match(bootstrap, /major >= 24/);
+  assert.match(bootstrap, /FEATURE_KANBAN_NODE_PATH/);
+  assert.match(bootstrap, /\/usr\/bin\/env/);
   assert.match(bootstrap, /CommandLine\.arguments\.dropFirst/);
   assert.match(bootstrap, /child\.waitUntilExit\(\)/);
   assert.doesNotMatch(bootstrap, /\.feature-kanban|openLog/);

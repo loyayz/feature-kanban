@@ -118,10 +118,7 @@ PACKAGE_VERSION="$("$NPM_COMMAND" pkg get version)"
 PACKAGE_VERSION="${PACKAGE_VERSION#\"}"
 PACKAGE_VERSION="${PACKAGE_VERSION%\"}"
 NODE_VERSION="$("$NODE_SOURCE" --version)"
-RUNTIME_COPY="$BUILD_ROOT/node"
 BOOTSTRAP_COPY="$BUILD_ROOT/FeatureKanbanBootstrap"
-cp -p -- "$NODE_SOURCE" "$RUNTIME_COPY"
-chmod 755 "$RUNTIME_COPY"
 
 xcrun swiftc \
   -parse-as-library \
@@ -130,19 +127,7 @@ xcrun swiftc \
   -o "$BOOTSTRAP_COPY" \
   "$REPOSITORY_ROOT/installer/macos/FeatureKanbanBootstrap.swift"
 chmod 755 "$BOOTSTRAP_COPY"
-xattr -c "$RUNTIME_COPY" "$BOOTSTRAP_COPY"
-plutil -lint "$REPOSITORY_ROOT/installer/macos/node.entitlements.plist"
-
-if [[ "$BUILD_MODE" == "signed" ]]; then
-  codesign \
-    --force \
-    --options runtime \
-    --timestamp \
-    --identifier com.featurekanban.node \
-    --entitlements "$REPOSITORY_ROOT/installer/macos/node.entitlements.plist" \
-    --sign "$SIGNING_IDENTITY" \
-    "$RUNTIME_COPY"
-fi
+xattr -c "$BOOTSTRAP_COPY"
 
 "$NODE_SOURCE" "$REPOSITORY_ROOT/dist/test/scripts/stage-macos-package.js" \
   --repo-root "$REPOSITORY_ROOT" \
@@ -150,7 +135,6 @@ fi
   --arch "$TARGET_ARCHITECTURE" \
   --product-version "$PACKAGE_VERSION" \
   --node-version "$NODE_VERSION" \
-  --runtime "$RUNTIME_COPY" \
   --bootstrap "$BOOTSTRAP_COPY"
 xattr -cr "$APP_ROOT"
 plutil -lint "$APP_ROOT/Contents/Info.plist"

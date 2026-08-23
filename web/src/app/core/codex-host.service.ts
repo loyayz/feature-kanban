@@ -23,8 +23,8 @@ export class CodexHostService {
   }
 
   openCodexSession(externalSessionId: string): void {
-    if (!this.connected || window.parent === window) return;
     this.navigationErrorState.set(null);
+    if (!this.connected || window.parent === window) return;
     window.parent.postMessage(
       {
         type: "feature-kanban:open-session",

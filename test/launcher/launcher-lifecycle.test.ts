@@ -8,6 +8,7 @@ import { CodexSupervisor } from "../../src/launcher/codex-supervisor.js";
 import { runLauncher, type LauncherDependencies } from "../../src/launcher/index.js";
 import type { DesktopProcessAdapter, ManagedChild } from "../../src/launcher/processes.js";
 import {
+  assertSupportedNodeRuntime,
   installedServiceRuntime,
   ServiceSupervisor,
   type ServiceAdapter,
@@ -82,14 +83,21 @@ macTest("concurrent launchers recover one crashed Unix socket with exactly one p
   }
 });
 
-test("launcher endpoints and installed runtimes remain platform-specific", () => {
+test("launcher endpoints remain platform-specific while services reuse local Node", () => {
   assert.match(launcherEndpoint("C:\\Users\\tester", "win32"), /^\\\\\.\\pipe\\feature-kanban-/);
   assert.match(launcherEndpoint("/Users/tester", "darwin"), /[\\/]\.feature-kanban[\\/]launcher-[0-9a-f]{16}\.sock$/);
-  assert.match(
-    installedServiceRuntime("/Applications/Feature Kanban.app/Contents/Resources", {}, "darwin").nodeExecutable,
-    /Contents[\\/]MacOS[\\/]FeatureKanbanNode$/,
+  assert.equal(
+    installedServiceRuntime("/Applications/Feature Kanban.app/Contents/Resources", {}, "darwin", "/usr/local/bin/node").nodeExecutable,
+    "/usr/local/bin/node",
   );
-  assert.match(installedServiceRuntime("C:\\Feature Kanban", {}, "win32").nodeExecutable, /runtime[\\/]node\.exe$/);
+  assert.equal(installedServiceRuntime("C:\\Feature Kanban", {}, "win32", "C:\\Node\\node.exe").nodeExecutable, "C:\\Node\\node.exe");
+});
+
+test("requires a local Node.js 24 or newer runtime", () => {
+  assert.doesNotThrow(() => assertSupportedNodeRuntime("24.0.0"));
+  assert.doesNotThrow(() => assertSupportedNodeRuntime("25.1.0"));
+  assert.throws(() => assertSupportedNodeRuntime("23.11.0"), /requires local Node\.js 24 or newer/);
+  assert.throws(() => assertSupportedNodeRuntime("invalid"), /requires local Node\.js 24 or newer/);
 });
 
 test("stale Unix-socket cleanup refuses an arbitrary file", async () => {

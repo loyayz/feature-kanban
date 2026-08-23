@@ -2,12 +2,12 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Out
 import type { CardDetail, SessionRecord, SpecDocumentResponse } from "../../../../src/shared/lifecycle-contract";
 import { CardApiService } from "../core/card-api.service";
 import { CodexHostService } from "../core/codex-host.service";
-import { MarkdownPreviewComponent } from "./markdown-preview.component";
+import { SpecPreviewDialogComponent } from "./spec-preview-dialog.component";
 
 @Component({
   selector: "fk-card-detail",
   standalone: true,
-  imports: [MarkdownPreviewComponent],
+  imports: [SpecPreviewDialogComponent],
   templateUrl: "./card-detail.component.html",
   styleUrl: "./card-detail.component.css",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -15,7 +15,6 @@ import { MarkdownPreviewComponent } from "./markdown-preview.component";
 export class CardDetailComponent implements OnChanges {
   @Input({ required: true }) card!: CardDetail;
   @Output() readonly closeDetail = new EventEmitter<void>();
-  @Output() readonly archive = new EventEmitter<boolean>();
 
   readonly preview = signal<SpecDocumentResponse | null>(null);
   readonly resourceLoading = signal(false);
@@ -85,6 +84,15 @@ export class CardDetailComponent implements OnChanges {
     return Boolean(
       (session.aiTool === "codex" && session.externalSessionId) || session.jumpUri?.startsWith("https://"),
     );
+  }
+
+  latestCodexSession(): SessionRecord | undefined {
+    return this.card.sessions.findLast((session) => session.aiTool === "codex" && Boolean(session.externalSessionId));
+  }
+
+  openLatestCodexSession(): void {
+    const session = this.latestCodexSession();
+    if (session?.externalSessionId) this.host.openCodexSession(session.externalSessionId);
   }
 
   async copy(value: string): Promise<void> {
